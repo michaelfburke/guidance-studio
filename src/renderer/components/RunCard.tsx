@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { RunMeta } from '../types'
 import { providerMeta } from '../providers'
@@ -70,12 +70,21 @@ function StatusBadge({ status }: { status: RunMeta['status'] }): JSX.Element {
 
 export default function RunCard({ run, onDelete }: RunCardProps): JSX.Element {
   const navigate = useNavigate()
+  const [pendingDelete, setPendingDelete] = useState(false)
 
-  const handleDelete = (e: React.MouseEvent): void => {
+  const handleDeleteClick = (e: React.MouseEvent): void => {
     e.stopPropagation()
-    if (confirm(`Delete run "${run.feature}"? This cannot be undone.`)) {
-      onDelete(run.id)
-    }
+    setPendingDelete(true)
+  }
+
+  const handleDeleteConfirm = (e: React.MouseEvent): void => {
+    e.stopPropagation()
+    onDelete(run.id)
+  }
+
+  const handleDeleteCancel = (e: React.MouseEvent): void => {
+    e.stopPropagation()
+    setPendingDelete(false)
   }
 
   return (
@@ -135,20 +144,40 @@ export default function RunCard({ run, onDelete }: RunCardProps): JSX.Element {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={handleDelete}
-            className="p-1.5 rounded text-slate-600 hover:text-red-400 hover:bg-red-900/20 transition-colors"
-            title="Delete run"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 3.5h10M5.5 3.5V2h3v1.5M4.5 3.5v7a1 1 0 001 1h3a1 1 0 001-1v-7" />
-            </svg>
-          </button>
+        <div className={`flex items-center gap-1 transition-opacity ${pendingDelete ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+          {pendingDelete ? (
+            <>
+              <span className="text-xs text-slate-400 mr-1">Delete?</span>
+              <button
+                onClick={handleDeleteConfirm}
+                className="px-2 py-1 rounded text-xs font-medium bg-red-900/40 text-red-400 hover:bg-red-900/60 hover:text-red-300 transition-colors"
+              >
+                Confirm
+              </button>
+              <button
+                onClick={handleDeleteCancel}
+                className="px-2 py-1 rounded text-xs font-medium text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={handleDeleteClick}
+                className="p-1.5 rounded text-slate-600 hover:text-red-400 hover:bg-red-900/20 transition-colors"
+                title="Delete run"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2 3.5h10M5.5 3.5V2h3v1.5M4.5 3.5v7a1 1 0 001 1h3a1 1 0 001-1v-7" />
+                </svg>
+              </button>
 
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-600">
-            <path d="M6 3l5 5-5 5" />
-          </svg>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-600">
+                <path d="M6 3l5 5-5 5" />
+              </svg>
+            </>
+          )}
         </div>
       </div>
     </div>

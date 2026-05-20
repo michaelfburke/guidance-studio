@@ -124,9 +124,12 @@ export default function SettingsPage(): JSX.Element {
       setTestErrors(prev => ({ ...prev, [provider]: err instanceof Error ? err.message : String(err) }))
     }
 
-    // Reset after delay
+    // Only auto-reset on success; failures stay visible until user retries
     setTimeout(() => {
-      setTestState(prev => ({ ...prev, [provider]: 'idle' }))
+      setTestState(prev => {
+        if (prev[provider] === 'ok') return { ...prev, [provider]: 'idle' }
+        return prev
+      })
     }, 5000)
   }, [])
 
