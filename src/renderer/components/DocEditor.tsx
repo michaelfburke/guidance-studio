@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 
 interface DocEditorProps {
   markdown: string
@@ -7,6 +7,7 @@ interface DocEditorProps {
   onGenerate?: () => void
   isGenerating?: boolean
   hasSteps?: boolean
+  isDocDirty?: boolean
 }
 
 function MarkdownPreview({ markdown }: { markdown: string }): JSX.Element {
@@ -19,7 +20,7 @@ function MarkdownPreview({ markdown }: { markdown: string }): JSX.Element {
       .replace(/>/g, '&gt;')
       // Headers
       .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold text-slate-100 mt-5 mb-2">$1</h3>')
-      .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold text-slate-100 mt-6 mb-3 pb-1 border-b border-slate-800">$2</h2>')
+      .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold text-slate-100 mt-6 mb-3 pb-1 border-b border-slate-800">$1</h2>')
       .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold text-slate-100 mt-4 mb-4">$1</h1>')
       // Bold and italic
       .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
@@ -70,16 +71,35 @@ export default function DocEditor({
   onSave,
   onGenerate,
   isGenerating = false,
-  hasSteps = false
+  hasSteps = false,
+  isDocDirty = false
 }: DocEditorProps): JSX.Element {
   const [view, setView] = useState<'edit' | 'preview' | 'split'>('split')
   const [copied, setCopied] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(markdown)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }, [markdown])
+
+  const handleSave = useCallback(() => {
+    onSave?.()
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }, [onSave])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault()
+        handleSave()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [handleSave])
 
   const charCount = markdown.length
   const wordCount = markdown.trim() ? markdown.trim().split(/\s+/).length : 0
@@ -181,10 +201,18 @@ export default function DocEditor({
             </button>
           )}
 
+          {/* Unsaved indicator */}
+          {isDocDirty && !saved && (
+            <span className="flex items-center gap-1 text-xs text-amber-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              Unsaved
+            </span>
+          )}
+
           {/* Save */}
           {onSave && (
             <button
-              onClick={onSave}
+              onClick={handleSave}
               className="btn btn-secondary btn-sm"
             >
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -192,7 +220,7 @@ export default function DocEditor({
                 <rect x="4" y="7" width="5" height="4.5" rx="0.5" />
                 <rect x="3.5" y="1.5" width="5" height="3" rx="0.5" />
               </svg>
-              Save
+              {saved ? 'Saved' : 'Save'}
             </button>
           )}
         </div>

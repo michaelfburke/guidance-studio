@@ -27,7 +27,15 @@ export default function RunDetailPage(): JSX.Element {
 
   // Doc editor state
   const [docMarkdown, setDocMarkdown] = useState('')
+  const [savedDocMarkdown, setSavedDocMarkdown] = useState('')
   const [isGeneratingDocs, setIsGeneratingDocs] = useState(false)
+
+  // Inline error banner
+  const [errorBanner, setErrorBanner] = useState<string | null>(null)
+  const showError = useCallback((msg: string) => {
+    setErrorBanner(msg)
+    setTimeout(() => setErrorBanner(null), 8000)
+  }, [])
 
   const unsubEventRef = useRef<(() => void) | null>(null)
   const unsubStepRef = useRef<(() => void) | null>(null)
@@ -46,6 +54,7 @@ export default function RunDetailPage(): JSX.Element {
       setAssistedSteps(data.steps || [])
       setEvents(data.events || [])
       setDocMarkdown(data.outputMd || '')
+      setSavedDocMarkdown(data.outputMd || '')
       setIsRunning(data.meta.status === 'running')
     } catch (err) {
       console.error('Failed to load run:', err)
@@ -155,6 +164,7 @@ export default function RunDetailPage(): JSX.Element {
 
       if (result.success) {
         setDocMarkdown(result.markdown)
+        setSavedDocMarkdown(result.markdown)
         setActiveTab('docs')
 
         // Update meta
@@ -165,7 +175,7 @@ export default function RunDetailPage(): JSX.Element {
         setRun(prev => prev ? { ...prev, meta: updatedMeta } : null)
       }
     } catch (err) {
-      alert(`Failed to generate docs: ${err instanceof Error ? err.message : String(err)}`)
+      showError(`Failed to generate docs: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setIsGeneratingDocs(false)
     }
@@ -174,6 +184,7 @@ export default function RunDetailPage(): JSX.Element {
   const handleSaveDocs = useCallback(async () => {
     if (!runId) return
     await window.electronAPI.runSaveOutput(runId, docMarkdown)
+    setSavedDocMarkdown(docMarkdown)
   }, [runId, docMarkdown])
 
   // Assisted mode handlers
@@ -241,9 +252,32 @@ export default function RunDetailPage(): JSX.Element {
   const { meta } = run
   const currentSteps = meta.mode === 'agent' ? liveSteps : assistedSteps
   const includedSteps = currentSteps.filter(s => !s.excluded)
+  const isDocDirty = docMarkdown !== savedDocMarkdown
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      {/* Inline error banner */}
+      {errorBanner && (
+        <div className="mx-6 mt-3 px-4 py-2.5 bg-red-900/30 border border-red-700/50 rounded-lg flex items-center justify-between gap-3 text-sm text-red-300">
+          <div className="flex items-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="shrink-0">
+              <circle cx="7" cy="7" r="5.5" />
+              <path d="M7 4.5v3M7 9h.01" />
+            </svg>
+            {errorBanner}
+          </div>
+          <button
+            onClick={() => setErrorBanner(null)}
+            className="text-red-400 hover:text-red-200 shrink-0"
+            aria-label="Dismiss"
+          >
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M3 3l7 7M10 3l-7 7" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="px-6 py-4 border-b border-slate-800/60 flex items-start justify-between gap-4">
         <div className="flex items-start gap-3 min-w-0">
@@ -459,6 +493,7 @@ export default function RunDetailPage(): JSX.Element {
             onGenerate={handleGenerateDocs}
             isGenerating={isGeneratingDocs}
             hasSteps={includedSteps.length > 0}
+            isDocDirty={isDocDirty}
           />
         )}
       </div>
