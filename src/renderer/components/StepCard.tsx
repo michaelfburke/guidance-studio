@@ -6,6 +6,7 @@ interface StepCardProps {
   isSelected?: boolean
   onClick?: () => void
   onDelete?: () => void
+  onToggleExclude?: () => void
   showDelete?: boolean
 }
 
@@ -14,24 +15,28 @@ export default function StepCard({
   isSelected = false,
   onClick,
   onDelete,
+  onToggleExclude,
   showDelete = false
 }: StepCardProps): JSX.Element {
   const [imgError, setImgError] = useState(false)
+  const excluded = !!step.excluded
 
   const hasScreenshot = step.screenshotPath && !imgError
 
-  // Convert file:// path or raw path for display
+  // Screenshots are served through the gsasset:// protocol (registered in the
+  // main process) — file:// URLs are blocked in the renderer.
   const screenshotSrc = step.screenshotPath
-    ? step.screenshotPath.startsWith('file://')
+    ? step.screenshotPath.startsWith('gsasset://')
       ? step.screenshotPath
-      : `file://${step.screenshotPath}`
+      : `gsasset://asset${encodeURI(step.screenshotPath.replace(/^file:\/\//, ''))}`
     : null
 
   return (
     <div
       className={`
-        relative rounded-xl border transition-all duration-150 overflow-hidden
+        group relative rounded-xl border transition-all duration-150 overflow-hidden
         ${onClick ? 'cursor-pointer' : ''}
+        ${excluded ? 'opacity-55' : ''}
         ${isSelected
           ? 'border-brand-600/70 bg-brand-950/20 shadow-lg shadow-brand-900/20'
           : 'border-slate-800 bg-slate-900 hover:border-slate-700'
@@ -47,13 +52,45 @@ export default function StepCard({
         {step.index + 1}
       </div>
 
+      {/* Include / exclude toggle */}
+      {onToggleExclude && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleExclude()
+          }}
+          className={`absolute top-2.5 right-2.5 z-10 flex items-center gap-1 px-1.5 py-1 rounded-md text-xs font-medium transition-colors ${
+            excluded
+              ? 'bg-amber-900/80 text-amber-300 hover:bg-amber-900'
+              : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 opacity-0 group-hover:opacity-100'
+          }`}
+          title={excluded ? 'Include in guidance' : 'Exclude from guidance'}
+        >
+          {excluded ? (
+            <>
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
+                <circle cx="7" cy="7" r="1.5" />
+                <path d="M1 1l12 12" />
+              </svg>
+              Excluded
+            </>
+          ) : (
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
+              <circle cx="7" cy="7" r="1.5" />
+            </svg>
+          )}
+        </button>
+      )}
+
       {/* Screenshot area */}
       {hasScreenshot && screenshotSrc ? (
         <div className="w-full h-36 bg-slate-800 overflow-hidden">
           <img
             src={screenshotSrc}
             alt={`Screenshot for step ${step.index + 1}`}
-            className="w-full h-full object-cover object-top"
+            className={`w-full h-full object-cover object-top ${excluded ? 'grayscale' : ''}`}
             onError={() => setImgError(true)}
           />
         </div>
@@ -71,7 +108,9 @@ export default function StepCard({
 
       {/* Content */}
       <div className="p-3 pt-2">
-        <h4 className="font-medium text-sm text-slate-100 leading-snug mb-1.5 pr-6">
+        <h4 className={`font-medium text-sm leading-snug mb-1.5 pr-6 ${
+          excluded ? 'text-slate-500 line-through' : 'text-slate-100'
+        }`}>
           {step.title}
         </h4>
         <p className="text-xs text-slate-400 leading-relaxed line-clamp-3">

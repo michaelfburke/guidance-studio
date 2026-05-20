@@ -32,6 +32,11 @@ function MarkdownPreview({ markdown }: { markdown: string }): JSX.Element {
         const code = match.replace(/```\w*\n?/, '').replace(/\n?```$/, '')
         return `<pre class="bg-slate-800 rounded-lg p-3 my-3 overflow-x-auto"><code class="text-sm font-mono text-slate-300">${code}</code></pre>`
       })
+      // Images
+      .replace(
+        /!\[([^\]]*)\]\(([^)\s]+)\)/g,
+        '<img src="$2" alt="$1" class="rounded-lg border border-slate-800 my-3 max-w-full" />'
+      )
       // Checkboxes
       .replace(/^- \[ \] (.+)$/gm, '<li class="flex items-start gap-2 text-slate-300 mb-1"><span class="mt-0.5 w-4 h-4 border border-slate-600 rounded flex-shrink-0"></span><span>$1</span></li>')
       .replace(/^- \[x\] (.+)$/gm, '<li class="flex items-start gap-2 text-slate-300 mb-1"><span class="mt-0.5 w-4 h-4 bg-brand-600 border border-brand-600 rounded flex-shrink-0 flex items-center justify-center text-xs text-white">✓</span><span>$1</span></li>')

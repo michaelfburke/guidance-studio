@@ -1,6 +1,17 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import type { AppSettings } from '../types'
+import { PROVIDERS, providerMeta, type ProviderId } from '../providers'
+
+function hostOf(url: string): string {
+  try {
+    return new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`)
+      .hostname.replace(/^www\./, '')
+      .toLowerCase()
+  } catch {
+    return ''
+  }
+}
 
 function generateRunId(): string {
   const ts = Date.now().toString(36)
@@ -10,7 +21,7 @@ function generateRunId(): string {
 
 interface FormState {
   mode: 'agent' | 'assisted'
-  provider: 'claude' | 'gemini'
+  provider: ProviderId
   productName: string
   url: string
   feature: string
@@ -19,25 +30,35 @@ interface FormState {
 
 export default function NewRunPage(): JSX.Element {
   const navigate = useNavigate()
-  const [form, setForm] = useState<FormState>({
+  const location = useLocation()
+  const prefill = (location.state as { prefill?: Partial<FormState> } | null)?.prefill
+
+  const [form, setForm] = useState<FormState>(() => ({
     mode: 'agent',
     provider: 'claude',
     productName: '',
     url: '',
     feature: '',
-    goal: ''
-  })
+    goal: '',
+    ...prefill
+  }))
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({})
   const [settings, setSettings] = useState<Partial<AppSettings>>({})
+  const [savedDomains, setSavedDomains] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     window.electronAPI.settingsGetAll().then(s => {
       setSettings(s)
-      if (s.defaultProvider) {
-        setForm(prev => ({ ...prev, provider: s.defaultProvider as 'claude' | 'gemini' }))
+      // Don't override an explicitly pre-filled provider (from a re-run).
+      if (s.defaultProvider && !prefill) {
+        setForm(prev => ({ ...prev, provider: s.defaultProvider as ProviderId }))
       }
     }).catch(console.error)
+
+    window.electronAPI.credentialsList()
+      .then(list => setSavedDomains(list.map(c => c.domain)))
+      .catch(console.error)
   }, [])
 
   const validate = (): boolean => {
@@ -59,14 +80,10 @@ export default function NewRunPage(): JSX.Element {
     e.preventDefault()
     if (!validate()) return
 
-    const apiKeySet = form.provider === 'claude'
-      ? settings.claudeApiKeySet
-      : settings.geminiApiKeySet
-
-    if (!apiKeySet && form.mode === 'agent') {
+    if (!providerReady(form.provider) && form.mode === 'agent') {
       const confirmed = confirm(
-        `No ${form.provider === 'claude' ? 'Claude' : 'Gemini'} API key configured. ` +
-        'The agent requires an API key to generate content. ' +
+        `No API key configured for ${providerMeta(form.provider).label}. ` +
+        'The agent requires it to generate content. ' +
         'Go to Settings to configure it, or continue anyway?'
       )
       if (!confirmed) {
@@ -121,10 +138,28 @@ export default function NewRunPage(): JSX.Element {
     if (errors[key]) setErrors(prev => ({ ...prev, [key]: undefined }))
   }
 
-  const providerWarning = form.mode === 'agent' && (
-    (form.provider === 'claude' && !settings.claudeApiKeySet) ||
-    (form.provider === 'gemini' && !settings.geminiApiKeySet)
-  )
+  // OpenAI-compatible endpoints work with a local proxy and built-in defaults,
+  // so they need no API key — only Claude and Gemini gate on a stored key.
+  const providerReady = (p: ProviderId): boolean => {
+    if (p === 'claude') return !!settings.claudeApiKeySet
+    if (p === 'gemini') return !!settings.geminiApiKeySet
+    return true
+  }
+
+  const readinessText = (p: ProviderId): string => {
+    if (p === 'openai') return 'OpenAI-compatible endpoint'
+    return providerReady(p) ? 'API key configured' : 'No API key'
+  }
+
+  const providerWarning = form.mode === 'agent' && !providerReady(form.provider)
+
+  // Saved login credentials matching the entered URL, if any.
+  const credentialMatch = (() => {
+    if (form.mode !== 'agent') return null
+    const h = hostOf(form.url)
+    if (!h) return null
+    return savedDomains.find(d => h === d || h.endsWith(`.${d}`)) ?? null
+  })()
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -192,41 +227,36 @@ export default function NewRunPage(): JSX.Element {
           {/* Provider selection */}
           <div>
             <div className="label">LLM Provider</div>
-            <div className="grid grid-cols-2 gap-3">
-              {(['claude', 'gemini'] as const).map(provider => {
-                const keySet = provider === 'claude' ? settings.claudeApiKeySet : settings.geminiApiKeySet
+            <div className="grid grid-cols-3 gap-3">
+              {PROVIDERS.map(meta => {
+                const ready = providerReady(meta.id)
+                const selected = form.provider === meta.id
                 return (
                   <button
-                    key={provider}
+                    key={meta.id}
                     type="button"
-                    onClick={() => update('provider', provider)}
+                    onClick={() => update('provider', meta.id)}
                     className={`
                       p-3 rounded-xl border-2 text-left transition-all duration-150
-                      ${form.provider === provider
-                        ? provider === 'claude' ? 'border-orange-600/70 bg-orange-900/10' : 'border-blue-600/70 bg-blue-900/10'
+                      ${selected
+                        ? meta.accentBorder
                         : 'border-slate-800 hover:border-slate-700 bg-slate-900'
                       }
                     `}
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className={provider === 'claude' ? 'badge-claude' : 'badge-gemini'}>
-                          {provider === 'claude' ? 'Claude' : 'Gemini'}
-                        </span>
-                        <span className="text-xs text-slate-400">
-                          {provider === 'claude' ? 'by Anthropic' : 'by Google'}
-                        </span>
-                      </div>
-                      {form.provider === provider && (
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={provider === 'claude' ? 'text-orange-400' : 'text-blue-400'}>
+                      <span className={meta.badgeClass}>{meta.label}</span>
+                      {selected && (
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={meta.accentText}>
                           <path d="M2 7l3.5 3.5L12 3" />
                         </svg>
                       )}
                     </div>
-                    <div className="mt-1.5 flex items-center gap-1.5">
-                      <div className={`w-1.5 h-1.5 rounded-full ${keySet ? 'bg-green-400' : 'bg-slate-600'}`} />
-                      <span className={`text-xs ${keySet ? 'text-green-400' : 'text-slate-500'}`}>
-                        {keySet ? 'API key configured' : 'No API key'}
+                    <div className="mt-1.5 text-xs text-slate-400">{meta.vendor}</div>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <div className={`w-1.5 h-1.5 rounded-full ${ready ? 'bg-green-400' : 'bg-slate-600'}`} />
+                      <span className={`text-xs ${ready ? 'text-green-400' : 'text-slate-500'}`}>
+                        {readinessText(meta.id)}
                       </span>
                     </div>
                   </button>
@@ -240,7 +270,7 @@ export default function NewRunPage(): JSX.Element {
                   <path d="M6.5 1.5L1 11h11L6.5 1.5z" />
                   <path d="M6.5 5v3M6.5 9.5h.01" />
                 </svg>
-                No API key for {form.provider === 'claude' ? 'Claude' : 'Gemini'}.
+                No API key for {providerMeta(form.provider).label}.
                 <button
                   type="button"
                   onClick={() => navigate('/settings')}
@@ -278,10 +308,31 @@ export default function NewRunPage(): JSX.Element {
                 value={form.url}
                 onChange={e => update('url', e.target.value)}
                 placeholder="https://app.example.com"
+                list="gs-saved-sites"
                 className={`input ${errors.url ? 'input-error' : ''}`}
               />
+              {savedDomains.length > 0 && (
+                <datalist id="gs-saved-sites">
+                  {savedDomains.map(d => (
+                    <option key={d} value={`https://${d}`} />
+                  ))}
+                </datalist>
+              )}
               {errors.url && (
                 <p className="text-xs text-red-400 mt-1">{errors.url}</p>
+              )}
+              {!errors.url && credentialMatch && (
+                <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
+                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M2 5.5l2.5 2.5L9 3" />
+                  </svg>
+                  Login credentials saved for {credentialMatch} — the agent will sign in automatically.
+                </p>
+              )}
+              {!errors.url && !credentialMatch && savedDomains.length > 0 && (
+                <p className="text-xs text-slate-600 mt-1">
+                  Pick a saved site, or manage logins in Settings.
+                </p>
               )}
             </div>
           )}

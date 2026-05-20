@@ -32,6 +32,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   settingsSet: (key: string, value: unknown) => ipcRenderer.invoke('settings:set', key, value),
   settingsGetAll: () => ipcRenderer.invoke('settings:getAll'),
 
+  // Credentials
+  credentialsList: () => ipcRenderer.invoke('credentials:list'),
+  credentialsSet: (params: { domain: string; username: string; password: string }) =>
+    ipcRenderer.invoke('credentials:set', params),
+  credentialsDelete: (domain: string) => ipcRenderer.invoke('credentials:delete', domain),
+
   // Runs
   runList: () => ipcRenderer.invoke('run:list'),
   runGet: (runId: string) => ipcRenderer.invoke('run:get', runId),
@@ -85,15 +91,17 @@ export interface RunStep {
   description: string
   screenshotPath: string | null
   thumbnailPath: string | null
+  excluded?: boolean
 }
 
 export interface RunMeta {
   id: string
   mode: 'agent' | 'assisted'
-  provider: 'claude' | 'gemini'
+  provider: 'claude' | 'gemini' | 'openai'
   productName: string
   feature: string
   goal: string
+  url?: string
   status: 'running' | 'completed' | 'failed' | 'stopped'
   createdAt: string
   stepCount: number

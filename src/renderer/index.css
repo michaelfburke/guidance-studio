@@ -99,6 +99,10 @@
     @apply badge bg-blue-900/60 text-blue-300 border border-blue-800/60;
   }
 
+  .badge-openai {
+    @apply badge bg-teal-900/60 text-teal-300 border border-teal-800/60;
+  }
+
   .status-running {
     @apply badge bg-amber-900/60 text-amber-300 border border-amber-800/60;
   }

@@ -5,10 +5,12 @@ import { app } from 'electron'
 export interface RunMeta {
   id: string
   mode: 'agent' | 'assisted'
-  provider: 'claude' | 'gemini'
+  provider: 'claude' | 'gemini' | 'openai'
   productName: string
   feature: string
   goal: string
+  /** Target URL for agent runs (absent for assisted runs). */
+  url?: string
   status: 'running' | 'completed' | 'failed' | 'stopped'
   createdAt: string
   stepCount: number
@@ -20,11 +22,21 @@ export interface RunStep {
   description: string
   screenshotPath: string | null
   thumbnailPath: string | null
+  /** When true, the step is omitted from generated guidance. */
+  excluded?: boolean
+}
+
+export interface RunEvent {
+  runId: string
+  type: string
+  message: string
+  timestamp: number
 }
 
 export interface RunData {
   meta: RunMeta
   steps: RunStep[]
+  events: RunEvent[]
   outputMd: string | null
 }
 
@@ -53,6 +65,20 @@ export function saveRunSteps(runId: string, steps: RunStep[]): void {
 export function saveRunOutput(runId: string, markdown: string): void {
   const runDir = ensureRunDir(runId)
   fs.writeFileSync(path.join(runDir, 'output.md'), markdown)
+}
+
+export function saveRunEvents(runId: string, events: RunEvent[]): void {
+  const runDir = ensureRunDir(runId)
+  fs.writeFileSync(path.join(runDir, 'events.json'), JSON.stringify(events, null, 2))
+}
+
+export function loadRunEvents(runId: string): RunEvent[] {
+  try {
+    const eventsPath = path.join(getRunsDir(), runId, 'events.json')
+    return JSON.parse(fs.readFileSync(eventsPath, 'utf-8'))
+  } catch {
+    return []
+  }
 }
 
 export function loadRunMeta(runId: string): RunMeta | null {
@@ -90,6 +116,7 @@ export function loadRunData(runId: string): RunData | null {
   return {
     meta,
     steps: loadRunSteps(runId),
+    events: loadRunEvents(runId),
     outputMd: loadRunOutput(runId)
   }
 }

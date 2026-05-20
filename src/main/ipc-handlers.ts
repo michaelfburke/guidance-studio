@@ -14,11 +14,23 @@ import {
   getRunDir,
   type RunMeta
 } from './storage'
-import { saveAsset, saveRecording } from './asset-manager'
+import { saveAsset, saveRecording, toLLMImage } from './asset-manager'
 import { runAgent, stopAgent } from './agent-orchestrator'
+import {
+  listCredentials,
+  setCredential,
+  deleteCredential,
+  getCredentialForUrl
+} from './credentials'
 import { ClaudeProvider } from './llm/claude'
 import { GeminiProvider } from './llm/gemini'
+import { OpenAIProvider } from './llm/openai'
+import { RetryingProvider } from './llm/retry'
+import { type LLMProvider } from './llm/provider'
 import { buildDocGenerationPrompt, SYSTEM_PROMPT } from './llm/agent-prompts'
+
+const DEFAULT_OPENAI_BASE_URL = 'http://localhost:4141/v1'
+const DEFAULT_OPENAI_MODEL = 'gpt-4.1'
 
 const KEYTAR_SERVICE = 'guidance-studio'
 
@@ -40,6 +52,45 @@ function saveSettings(settings: Record<string, unknown>): void {
   fs.writeFileSync(getSettingsPath(), JSON.stringify(settings, null, 2))
 }
 
+/** Builds the LLM provider for a run, reading keys and config from storage. */
+async function buildProvider(provider: string): Promise<LLMProvider> {
+  if (provider === 'claude' || provider === 'gemini') {
+    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, provider)
+    if (!apiKey) {
+      throw new Error(`No API key found for provider: ${provider}. Please configure it in Settings.`)
+    }
+    return provider === 'claude' ? new ClaudeProvider(apiKey) : new GeminiProvider(apiKey)
+  }
+
+  if (provider === 'openai') {
+    // The API key is optional — a local Copilot proxy does not need one.
+    const apiKey = (await keytar.getPassword(KEYTAR_SERVICE, 'openai')) || ''
+    const settings = loadSettings()
+    const baseURL = (settings.openaiBaseUrl as string) || DEFAULT_OPENAI_BASE_URL
+    const model = (settings.openaiModel as string) || DEFAULT_OPENAI_MODEL
+    return new OpenAIProvider({ apiKey, baseURL, model })
+  }
+
+  throw new Error(`Unknown provider: ${provider}`)
+}
+
+/** Replaces [[screenshot:N]] tokens in generated docs with the step screenshots. */
+function embedScreenshots(
+  markdown: string,
+  steps: Array<{ index: number; title: string; screenshotPath: string | null }>
+): string {
+  let out = markdown
+  for (const step of steps) {
+    if (!step.screenshotPath) continue
+    const token = `[[screenshot:${step.index + 1}]]`
+    const alt = step.title.replace(/[[\]]/g, '')
+    const url = `gsasset://asset${encodeURI(step.screenshotPath)}`
+    out = out.split(token).join(`![${alt}](${url})`)
+  }
+  // Drop any leftover tokens that had no matching screenshot.
+  return out.replace(/\[\[screenshot:\d+\]\]/g, '')
+}
+
 export function registerIpcHandlers(): void {
   // ── Agent ──────────────────────────────────────────────────────────────────
   ipcMain.handle('agent:start', async (_event, params: {
@@ -52,32 +103,28 @@ export function registerIpcHandlers(): void {
   }) => {
     const { runId, url, productName, feature, goal, provider } = params
 
-    // Get API key for provider
-    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, provider)
-    if (!apiKey) {
-      throw new Error(`No API key found for provider: ${provider}. Please configure it in Settings.`)
-    }
-
-    const llmProvider = provider === 'claude'
-      ? new ClaudeProvider(apiKey)
-      : new GeminiProvider(apiKey)
+    const llmProvider = await buildProvider(provider)
 
     // Create initial run meta
     const meta: RunMeta = {
       id: runId,
       mode: 'agent',
-      provider: provider as 'claude' | 'gemini',
+      provider: provider as RunMeta['provider'],
       productName,
       feature,
       goal,
+      url,
       status: 'running',
       createdAt: new Date().toISOString(),
       stepCount: 0
     }
     saveRunMeta(meta)
 
+    // Look up stored login credentials matching this URL's domain, if any.
+    const credentials = await getCredentialForUrl(url)
+
     // Start agent in background
-    runAgent({ runId, url, productName, feature, goal, llmProvider })
+    runAgent({ runId, url, productName, feature, goal, llmProvider, credentials })
       .catch(err => console.error('Agent error:', err))
 
     return { success: true, runId }
@@ -93,6 +140,25 @@ export function registerIpcHandlers(): void {
     return { success: true }
   })
 
+  // ── Credentials ────────────────────────────────────────────────────────────
+  ipcMain.handle('credentials:list', async () => {
+    return listCredentials()
+  })
+
+  ipcMain.handle('credentials:set', async (_event, params: {
+    domain: string
+    username: string
+    password: string
+  }) => {
+    await setCredential(params.domain, params.username, params.password)
+    return { success: true }
+  })
+
+  ipcMain.handle('credentials:delete', async (_event, domain: string) => {
+    await deleteCredential(domain)
+    return { success: true }
+  })
+
   // ── Settings ───────────────────────────────────────────────────────────────
   ipcMain.handle('settings:get', async (_event, key: string) => {
     // API keys come from keytar
@@ -101,6 +167,9 @@ export function registerIpcHandlers(): void {
     }
     if (key === 'geminiApiKey') {
       return keytar.getPassword(KEYTAR_SERVICE, 'gemini')
+    }
+    if (key === 'openaiApiKey') {
+      return keytar.getPassword(KEYTAR_SERVICE, 'openai')
     }
 
     const settings = loadSettings()
@@ -125,6 +194,14 @@ export function registerIpcHandlers(): void {
       }
       return { success: true }
     }
+    if (key === 'openaiApiKey') {
+      if (value && typeof value === 'string') {
+        await keytar.setPassword(KEYTAR_SERVICE, 'openai', value)
+      } else {
+        await keytar.deletePassword(KEYTAR_SERVICE, 'openai')
+      }
+      return { success: true }
+    }
 
     const settings = loadSettings()
     if (value === null || value === undefined) {
@@ -141,11 +218,13 @@ export function registerIpcHandlers(): void {
     // Mask API keys - just return whether they're set
     const claudeKey = await keytar.getPassword(KEYTAR_SERVICE, 'claude')
     const geminiKey = await keytar.getPassword(KEYTAR_SERVICE, 'gemini')
+    const openaiKey = await keytar.getPassword(KEYTAR_SERVICE, 'openai')
 
     return {
       ...settings,
       claudeApiKeySet: !!claudeKey,
-      geminiApiKeySet: !!geminiKey
+      geminiApiKeySet: !!geminiKey,
+      openaiApiKeySet: !!openaiKey
     }
   })
 
@@ -213,22 +292,14 @@ export function registerIpcHandlers(): void {
   }) => {
     const { provider, productName, feature, goal, steps, toneGuide, linkedDocs, runId } = params
 
-    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, provider)
-    if (!apiKey) {
-      throw new Error(`No API key found for provider: ${provider}`)
-    }
+    const llmProvider = new RetryingProvider(await buildProvider(provider))
 
-    const llmProvider = provider === 'claude'
-      ? new ClaudeProvider(apiKey)
-      : new GeminiProvider(apiKey)
-
-    // Load screenshots for steps that have them
+    // Load screenshots for steps that have them (downscaled for the LLM).
     const images: Buffer[] = []
     for (const step of steps) {
       if (step.screenshotPath) {
         try {
-          const imgData = fs.readFileSync(step.screenshotPath)
-          images.push(imgData)
+          images.push(toLLMImage(fs.readFileSync(step.screenshotPath)))
         } catch {
           // skip if file not found
         }
@@ -244,12 +315,15 @@ export function registerIpcHandlers(): void {
       linkedDocs
     )
 
-    const markdown = await llmProvider.call({
+    const rawMarkdown = await llmProvider.call({
       prompt,
       images: images.length > 0 ? images : undefined,
       maxTokens: 8192,
       systemPrompt: SYSTEM_PROMPT
     })
+
+    // Replace [[screenshot:N]] tokens with the actual step screenshots.
+    const markdown = embedScreenshots(rawMarkdown, steps)
 
     // Save the output
     saveRunOutput(runId, markdown)
@@ -265,21 +339,12 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('llm:test-connection', async (_event, provider: string) => {
-    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, provider)
-    if (!apiKey) {
-      return { success: false, error: 'No API key configured' }
-    }
-
     try {
-      const llmProvider = provider === 'claude'
-        ? new ClaudeProvider(apiKey)
-        : new GeminiProvider(apiKey)
-
+      const llmProvider = await buildProvider(provider)
       await llmProvider.call({
         prompt: 'Respond with "OK" only.',
         maxTokens: 10
       })
-
       return { success: true }
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) }

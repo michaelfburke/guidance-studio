@@ -1,6 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { RunMeta } from '../types'
+import { providerMeta } from '../providers'
 
 interface RunCardProps {
   run: RunMeta
@@ -101,8 +102,8 @@ export default function RunCard({ run, onDelete }: RunCardProps): JSX.Element {
               {run.mode === 'agent' ? 'Agent' : 'Assisted'}
             </span>
 
-            <span className={run.provider === 'claude' ? 'badge-claude' : 'badge-gemini'}>
-              {run.provider === 'claude' ? 'Claude' : 'Gemini'}
+            <span className={providerMeta(run.provider).badgeClass}>
+              {providerMeta(run.provider).label}
             </span>
 
             <StatusBadge status={run.status} />

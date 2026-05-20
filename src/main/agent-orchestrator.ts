@@ -1,13 +1,22 @@
 import { BrowserWindow } from 'electron'
 import { type LLMProvider } from './llm/provider'
-import { buildAgentPlanningPrompt, SYSTEM_PROMPT } from './llm/agent-prompts'
+import {
+  AGENT_SYSTEM_PROMPT,
+  buildAgentActionPrompt,
+  type AgentActionContext
+} from './llm/agent-prompts'
 import {
   saveRunMeta,
   saveRunSteps,
+  saveRunEvents,
   loadRunMeta,
+  type RunMeta,
   type RunStep
 } from './storage'
-import { generatePlaceholderPng, saveScreenshot, saveThumbnail } from './asset-manager'
+import { saveScreenshot, toLLMImage } from './asset-manager'
+import { BrowserAgent, type PageSnapshot } from './browser/browser-agent'
+import { type CredentialSecret } from './credentials'
+import { RetryingProvider } from './llm/retry'
 
 export interface AgentEvent {
   runId: string
@@ -16,45 +25,45 @@ export interface AgentEvent {
   timestamp: number
 }
 
+interface AgentAction {
+  title: string
+  description: string
+  action: 'click' | 'type' | 'navigate' | 'scroll' | 'done'
+  index?: number
+  value?: string
+}
+
+const MAX_STEPS = 16
+
 const activeAgents = new Map<string, { stopped: boolean }>()
+// Per-run event logs, persisted so the activity log survives reloads.
+const runEventLogs = new Map<string, AgentEvent[]>()
 
 function emitEvent(runId: string, type: AgentEvent['type'], message: string): void {
-  const event: AgentEvent = {
-    runId,
-    type,
-    message,
-    timestamp: Date.now()
+  const event: AgentEvent = { runId, type, message, timestamp: Date.now() }
+  const log = runEventLogs.get(runId)
+  if (log) {
+    log.push(event)
+    // Persist before broadcasting, so a reload never loses an event.
+    saveRunEvents(runId, log)
   }
-  // Broadcast to all windows
   BrowserWindow.getAllWindows().forEach(win => {
     win.webContents.send('agent:event', event)
   })
 }
 
-function emitStep(runId: string, step: RunStep): void {
+function emitStep(step: RunStep): void {
   BrowserWindow.getAllWindows().forEach(win => {
     win.webContents.send('agent:step', step)
   })
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 function isStopped(runId: string): boolean {
   return activeAgents.get(runId)?.stopped ?? true
 }
 
-interface PlannedStep {
-  index: number
-  title: string
-  description: string
-  action: string
-}
-
-interface AgentPlan {
-  productName: string
-  steps: PlannedStep[]
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
 }
 
 export async function runAgent(params: {
@@ -64,157 +73,124 @@ export async function runAgent(params: {
   feature: string
   goal: string
   llmProvider: LLMProvider
+  credentials?: CredentialSecret | null
 }): Promise<void> {
   const { runId, url, productName, feature, goal, llmProvider } = params
+  const credentials = params.credentials ?? null
 
-  // Register agent
   activeAgents.set(runId, { stopped: false })
+  runEventLogs.set(runId, [])
+
+  // Retry rate-limit / overload errors with backoff, surfacing each wait.
+  const provider = new RetryingProvider(llmProvider, {
+    shouldContinue: () => !isStopped(runId),
+    onRetry: info => emitEvent(
+      runId,
+      'info',
+      `Rate limited — waiting ${Math.round(info.delayMs / 1000)}s before retry ${info.attempt}/${info.maxRetries}`
+    )
+  })
+
+  const browser = new BrowserAgent()
+  const steps: RunStep[] = []
+  const history: string[] = []
 
   try {
-    // Phase 1: Navigation
-    emitEvent(runId, 'info', `Starting agent run for: ${goal}`)
-    await sleep(400)
+    emitEvent(runId, 'info', `Launching browser for: ${goal}`)
+    await browser.launch()
 
     if (isStopped(runId)) return
 
     emitEvent(runId, 'nav', `Navigating to ${url}`)
-    await sleep(800)
+    await browser.goto(url)
 
-    if (isStopped(runId)) return
-
-    emitEvent(runId, 'observe', 'Page loaded. Analyzing interface structure...')
-    await sleep(600)
-
-    if (isStopped(runId)) return
-
-    emitEvent(runId, 'analyze', `Identifying UI elements relevant to: "${feature}"`)
-    await sleep(700)
-
-    if (isStopped(runId)) return
-
-    emitEvent(runId, 'info', 'Generating exploration plan using LLM...')
-    await sleep(300)
-
-    // Phase 2: LLM Planning
-    let plan: AgentPlan
-    try {
-      const prompt = buildAgentPlanningPrompt(url, goal)
-      const response = await llmProvider.call({
-        prompt,
-        maxTokens: 2048,
-        systemPrompt: SYSTEM_PROMPT
-      })
-
-      if (isStopped(runId)) return
-
-      // Parse JSON response
-      let jsonText = response.trim()
-      // Strip markdown code fences if present
-      jsonText = jsonText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '')
-      plan = JSON.parse(jsonText) as AgentPlan
-    } catch (err) {
-      emitEvent(runId, 'error', `Failed to generate plan: ${err instanceof Error ? err.message : String(err)}`)
-
-      // Use fallback plan
-      plan = generateFallbackPlan(productName, feature, goal)
+    if (credentials) {
+      emitEvent(runId, 'info', 'Login credentials found for this site — the agent will sign in if prompted.')
     }
 
-    if (isStopped(runId)) return
-
-    emitEvent(runId, 'info', `Plan ready. Executing ${plan.steps.length} steps...`)
-    await sleep(500)
-
-    // Phase 3: Execute steps
-    const steps: RunStep[] = []
-
-    for (const plannedStep of plan.steps) {
+    for (let stepNum = 1; stepNum <= MAX_STEPS; stepNum++) {
       if (isStopped(runId)) break
 
-      const stepIndex = plannedStep.index
-
-      // Emit action events based on step type
-      const action = plannedStep.action || 'observe'
-
-      if (action === 'nav') {
-        emitEvent(runId, 'nav', `Navigating to: ${plannedStep.title}`)
-      } else if (action === 'click') {
-        emitEvent(runId, 'click', `Clicking: ${plannedStep.title}`)
-      } else if (action === 'type') {
-        emitEvent(runId, 'type', `Entering data: ${plannedStep.title}`)
-      } else {
-        emitEvent(runId, 'observe', `Observing: ${plannedStep.title}`)
+      // Capture the real current page state.
+      emitEvent(runId, 'screenshot', `Capturing page state (step ${stepNum})`)
+      let snap: PageSnapshot
+      try {
+        snap = await browser.snapshot()
+      } catch (err) {
+        emitEvent(runId, 'error', `Could not read the page: ${errMessage(err)}`)
+        break
       }
 
-      await sleep(600 + Math.random() * 400)
+      if (isStopped(runId)) break
+
+      // Ask the LLM what to do next, given the real screenshot + elements.
+      emitEvent(runId, 'analyze', `Analyzing page: ${snap.title || snap.url}`)
+      let action: AgentAction
+      try {
+        // Send a downscaled image to the LLM; the full-res PNG is kept on disk.
+        action = await decideAction(provider, toLLMImage(snap.screenshot), {
+          productName,
+          feature,
+          goal,
+          url: snap.url,
+          pageTitle: snap.title,
+          stepNumber: stepNum,
+          maxSteps: MAX_STEPS,
+          elements: snap.elements,
+          history,
+          hasCredentials: credentials !== null
+        })
+      } catch (err) {
+        emitEvent(runId, 'error', `LLM could not decide the next step: ${errMessage(err)}`)
+        break
+      }
 
       if (isStopped(runId)) break
 
-      emitEvent(runId, 'screenshot', `Capturing screenshot for step ${stepIndex + 1}`)
-      await sleep(300)
-
-      // Generate placeholder screenshot
-      const screenshotData = generatePlaceholderPng(
-        `Step ${stepIndex + 1}: ${plannedStep.title}`,
-        800,
-        600
-      )
-
-      const screenshotPath = saveScreenshot(runId, stepIndex, screenshotData.toString('base64'))
-      const thumbnailPath = saveThumbnail(runId, stepIndex, screenshotData.toString('base64'))
-
-      emitEvent(runId, 'analyze', `Analyzing step ${stepIndex + 1}: ${plannedStep.title}`)
-      await sleep(400 + Math.random() * 300)
-
-      if (isStopped(runId)) break
-
+      // Record the step against the real screenshot of the page it describes.
+      const stepIndex = steps.length
+      const screenshotPath = saveScreenshot(runId, stepIndex, snap.screenshot.toString('base64'))
       const step: RunStep = {
         index: stepIndex,
-        title: plannedStep.title,
-        description: plannedStep.description,
+        title: action.title,
+        description: action.description,
         screenshotPath,
-        thumbnailPath
+        thumbnailPath: screenshotPath
       }
-
       steps.push(step)
+      history.push(action.title)
 
-      // Emit step discovered
-      emitEvent(runId, 'step', `Step ${stepIndex + 1} discovered: ${plannedStep.title}`)
-      emitStep(runId, step)
+      emitActionEvent(runId, action)
+      emitEvent(runId, 'step', `Step ${stepIndex + 1} recorded: ${action.title}`)
+      emitStep(step)
+      persistProgress(runId, steps)
 
-      // Periodically save progress
-      saveRunSteps(runId, steps)
-      const meta = loadRunMeta(runId)
-      if (meta) {
-        meta.stepCount = steps.length
-        saveRunMeta(meta)
+      if (action.action === 'done') {
+        emitEvent(runId, 'info', 'Agent reports the goal is complete.')
+        break
       }
 
-      await sleep(200)
-    }
-
-    if (!isStopped(runId)) {
-      // Phase 4: Complete
-      emitEvent(runId, 'complete', `Agent completed. Discovered ${steps.length} steps.`)
-
-      // Final save
-      saveRunSteps(runId, steps)
-      const meta = loadRunMeta(runId)
-      if (meta) {
-        meta.status = 'completed'
-        meta.stepCount = steps.length
-        saveRunMeta(meta)
+      // Perform the action in the real browser.
+      try {
+        await executeAction(browser, action, credentials)
+      } catch (err) {
+        // A failed action is not fatal — the next snapshot reflects reality.
+        emitEvent(runId, 'error', `Could not perform "${action.title}": ${errMessage(err)}`)
       }
     }
+
+    const finalStatus: RunMeta['status'] = isStopped(runId) ? 'stopped' : 'completed'
+    if (finalStatus === 'completed') {
+      emitEvent(runId, 'complete', `Agent completed. Captured ${steps.length} steps.`)
+    }
+    finalize(runId, steps, finalStatus)
   } catch (err) {
-    emitEvent(runId, 'error', `Agent error: ${err instanceof Error ? err.message : String(err)}`)
-
-    const meta = loadRunMeta(runId)
-    if (meta) {
-      meta.status = 'failed'
-      saveRunMeta(meta)
-    }
+    emitEvent(runId, 'error', `Agent error: ${errMessage(err)}`)
+    finalize(runId, steps, 'failed')
   } finally {
+    await browser.close()
     activeAgents.delete(runId)
+    runEventLogs.delete(runId)
   }
 }
 
@@ -225,52 +201,110 @@ export function stopAgent(runId: string): void {
   }
 }
 
-function generateFallbackPlan(productName: string, feature: string, goal: string): AgentPlan {
-  return {
-    productName,
-    steps: [
-      {
-        index: 0,
-        title: 'Navigate to the application',
-        description: `Opened ${productName} and landed on the main dashboard. The interface shows the primary navigation and key features.`,
-        action: 'nav'
-      },
-      {
-        index: 1,
-        title: `Locate ${feature} section`,
-        description: `Found the ${feature} section in the navigation menu. Clicked to expand and access the feature area.`,
-        action: 'click'
-      },
-      {
-        index: 2,
-        title: 'Review current state',
-        description: `The ${feature} interface loaded successfully. Observed the existing configuration and available options.`,
-        action: 'observe'
-      },
-      {
-        index: 3,
-        title: 'Initiate the workflow',
-        description: `Clicked the primary action button to begin: "${goal}". A dialog or form appeared with required fields.`,
-        action: 'click'
-      },
-      {
-        index: 4,
-        title: 'Configure settings',
-        description: 'Filled in the required fields and adjusted configuration options according to the desired setup.',
-        action: 'type'
-      },
-      {
-        index: 5,
-        title: 'Submit and confirm',
-        description: 'Submitted the form and confirmed the action. The system processed the request and displayed a success message.',
-        action: 'click'
-      },
-      {
-        index: 6,
-        title: 'Verify the result',
-        description: 'Navigated back to the main view to verify the changes were applied correctly. The updated state is now visible.',
-        action: 'observe'
-      }
-    ]
+async function decideAction(
+  llm: LLMProvider,
+  screenshot: Buffer,
+  ctx: AgentActionContext
+): Promise<AgentAction> {
+  const raw = await llm.call({
+    prompt: buildAgentActionPrompt(ctx),
+    images: [screenshot],
+    maxTokens: 1024,
+    systemPrompt: AGENT_SYSTEM_PROMPT
+  })
+
+  let json = raw.trim()
+  // Strip markdown fences if the model added them anyway.
+  json = json.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '')
+  // Isolate the JSON object in case of stray prose.
+  const start = json.indexOf('{')
+  const end = json.lastIndexOf('}')
+  if (start >= 0 && end > start) {
+    json = json.slice(start, end + 1)
+  }
+
+  const parsed = JSON.parse(json) as AgentAction
+  if (!parsed || typeof parsed.action !== 'string') {
+    throw new Error('LLM response had no valid action')
+  }
+  parsed.title = parsed.title?.trim() || `Step (${parsed.action})`
+  parsed.description = parsed.description?.trim() || ''
+  return parsed
+}
+
+/**
+ * Substitutes {{username}} / {{password}} placeholders with the real stored
+ * values. This is the only place the actual secrets are used — they are never
+ * sent to the LLM, logged, or written into saved run steps.
+ */
+function applyCredentials(value: string, creds: CredentialSecret | null): string {
+  if (!creds) return value
+  return value
+    .replace(/\{\{\s*username\s*\}\}/gi, creds.username)
+    .replace(/\{\{\s*password\s*\}\}/gi, creds.password)
+}
+
+async function executeAction(
+  browser: BrowserAgent,
+  action: AgentAction,
+  credentials: CredentialSecret | null
+): Promise<void> {
+  switch (action.action) {
+    case 'click':
+      if (action.index == null) throw new Error('click action is missing an element index')
+      await browser.click(action.index)
+      break
+    case 'type':
+      if (action.index == null) throw new Error('type action is missing an element index')
+      await browser.type(action.index, applyCredentials(action.value ?? '', credentials))
+      break
+    case 'navigate':
+      if (!action.value) throw new Error('navigate action is missing a URL')
+      await browser.goto(action.value)
+      break
+    case 'scroll':
+      await browser.scroll()
+      break
+    case 'done':
+      break
+  }
+}
+
+function emitActionEvent(runId: string, action: AgentAction): void {
+  switch (action.action) {
+    case 'navigate':
+      emitEvent(runId, 'nav', `Navigating: ${action.title}`)
+      break
+    case 'click':
+      emitEvent(runId, 'click', `Clicking: ${action.title}`)
+      break
+    case 'type':
+      emitEvent(runId, 'type', `Entering data: ${action.title}`)
+      break
+    case 'scroll':
+      emitEvent(runId, 'observe', `Scrolling: ${action.title}`)
+      break
+    case 'done':
+      emitEvent(runId, 'observe', `Final state: ${action.title}`)
+      break
+  }
+}
+
+function persistProgress(runId: string, steps: RunStep[]): void {
+  saveRunSteps(runId, steps)
+  const meta = loadRunMeta(runId)
+  if (meta) {
+    meta.stepCount = steps.length
+    saveRunMeta(meta)
+  }
+}
+
+function finalize(runId: string, steps: RunStep[], status: RunMeta['status']): void {
+  saveRunSteps(runId, steps)
+  const meta = loadRunMeta(runId)
+  if (meta) {
+    meta.status = status
+    meta.stepCount = steps.length
+    saveRunMeta(meta)
   }
 }

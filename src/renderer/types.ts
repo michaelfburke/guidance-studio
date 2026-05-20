@@ -11,15 +11,17 @@ export interface RunStep {
   description: string
   screenshotPath: string | null
   thumbnailPath: string | null
+  excluded?: boolean
 }
 
 export interface RunMeta {
   id: string
   mode: 'agent' | 'assisted'
-  provider: 'claude' | 'gemini'
+  provider: 'claude' | 'gemini' | 'openai'
   productName: string
   feature: string
   goal: string
+  url?: string
   status: 'running' | 'completed' | 'failed' | 'stopped'
   createdAt: string
   stepCount: number
@@ -28,15 +30,19 @@ export interface RunMeta {
 export interface RunData {
   meta: RunMeta
   steps: RunStep[]
+  events: AgentEvent[]
   outputMd: string | null
 }
 
 export interface AppSettings {
-  defaultProvider: 'claude' | 'gemini'
+  defaultProvider: 'claude' | 'gemini' | 'openai'
   toneGuide: string
   linkedDocs: string
   claudeApiKeySet?: boolean
   geminiApiKeySet?: boolean
+  openaiApiKeySet?: boolean
+  openaiBaseUrl?: string
+  openaiModel?: string
 }
 
 export interface ElectronAPI {
@@ -59,6 +65,11 @@ export interface ElectronAPI {
   settingsGet: (key: string) => Promise<unknown>
   settingsSet: (key: string, value: unknown) => Promise<{ success: boolean }>
   settingsGetAll: () => Promise<AppSettings & Record<string, unknown>>
+
+  // Credentials
+  credentialsList: () => Promise<Array<{ domain: string; username: string }>>
+  credentialsSet: (params: { domain: string; username: string; password: string }) => Promise<{ success: boolean }>
+  credentialsDelete: (domain: string) => Promise<{ success: boolean }>
 
   // Runs
   runList: () => Promise<RunMeta[]>

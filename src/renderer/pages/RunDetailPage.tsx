@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import type { RunMeta, RunStep, AgentEvent, RunData } from '../types'
+import { providerMeta } from '../providers'
 import ActivityLog from '../components/ActivityLog'
 import StepCard from '../components/StepCard'
 import DocEditor from '../components/DocEditor'
@@ -19,7 +20,6 @@ export default function RunDetailPage(): JSX.Element {
   // Agent state
   const [events, setEvents] = useState<AgentEvent[]>([])
   const [liveSteps, setLiveSteps] = useState<RunStep[]>([])
-  const [selectedStep, setSelectedStep] = useState<number | null>(null)
   const [isRunning, setIsRunning] = useState(false)
 
   // Assisted state
@@ -44,6 +44,7 @@ export default function RunDetailPage(): JSX.Element {
       setRun(data)
       setLiveSteps(data.steps || [])
       setAssistedSteps(data.steps || [])
+      setEvents(data.events || [])
       setDocMarkdown(data.outputMd || '')
       setIsRunning(data.meta.status === 'running')
     } catch (err) {
@@ -102,11 +103,41 @@ export default function RunDetailPage(): JSX.Element {
     setIsRunning(false)
   }, [runId])
 
+  // Open the New Run form pre-filled with this run's settings, so it can be
+  // tweaked and run again as a fresh run (the original is left intact).
+  const handleRerun = useCallback(() => {
+    if (!run) return
+    navigate('/runs/new', {
+      state: {
+        prefill: {
+          mode: run.meta.mode,
+          provider: run.meta.provider,
+          productName: run.meta.productName,
+          url: run.meta.url ?? '',
+          feature: run.meta.feature,
+          goal: run.meta.goal
+        }
+      }
+    })
+  }, [run, navigate])
+
+  // Include / exclude a step from the generated guidance.
+  const handleToggleExclude = useCallback(async (index: number): Promise<void> => {
+    const updated = liveSteps.map(s =>
+      s.index === index ? { ...s, excluded: !s.excluded } : s
+    )
+    setLiveSteps(updated)
+    if (runId) await window.electronAPI.runSaveSteps(runId, updated)
+  }, [liveSteps, runId])
+
   const handleGenerateDocs = useCallback(async () => {
     if (!runId || !run) return
     setIsGeneratingDocs(true)
 
-    const steps = run.meta.mode === 'agent' ? liveSteps : assistedSteps
+    // Only included steps go into the guidance; renumber so they read 1, 2, 3…
+    const steps = (run.meta.mode === 'agent' ? liveSteps : assistedSteps)
+      .filter(s => !s.excluded)
+      .map((s, i) => ({ ...s, index: i }))
 
     try {
       const settings = await window.electronAPI.settingsGetAll()
@@ -209,6 +240,7 @@ export default function RunDetailPage(): JSX.Element {
 
   const { meta } = run
   const currentSteps = meta.mode === 'agent' ? liveSteps : assistedSteps
+  const includedSteps = currentSteps.filter(s => !s.excluded)
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -228,8 +260,8 @@ export default function RunDetailPage(): JSX.Element {
               <span className={meta.mode === 'agent' ? 'badge-agent' : 'badge-assisted'}>
                 {meta.mode === 'agent' ? 'Agent' : 'Assisted'}
               </span>
-              <span className={meta.provider === 'claude' ? 'badge-claude' : 'badge-gemini'}>
-                {meta.provider === 'claude' ? 'Claude' : 'Gemini'}
+              <span className={providerMeta(meta.provider).badgeClass}>
+                {providerMeta(meta.provider).label}
               </span>
               <span className={
                 meta.status === 'running' ? 'status-running' :
@@ -279,9 +311,22 @@ export default function RunDetailPage(): JSX.Element {
             </button>
           )}
 
+          {!isRunning && (
+            <button
+              onClick={handleRerun}
+              className="btn btn-secondary btn-sm"
+              title="Edit settings and run again as a new run"
+            >
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 6.5a4.5 4.5 0 11-1.3-3.2M11 1.5v3H8" />
+              </svg>
+              Re-run
+            </button>
+          )}
+
           <button
             onClick={handleGenerateDocs}
-            disabled={isGeneratingDocs || currentSteps.length === 0 || isRunning}
+            disabled={isGeneratingDocs || includedSteps.length === 0 || isRunning}
             className="btn btn-primary btn-sm"
           >
             {isGeneratingDocs ? (
@@ -371,16 +416,26 @@ export default function RunDetailPage(): JSX.Element {
                       )}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3">
-                      {liveSteps.map(step => (
-                        <StepCard
-                          key={step.index}
-                          step={step}
-                          isSelected={selectedStep === step.index}
-                          onClick={() => setSelectedStep(selectedStep === step.index ? null : step.index)}
-                        />
-                      ))}
-                    </div>
+                    <>
+                      <div className="flex items-center justify-between mb-3 px-0.5">
+                        <span className="text-xs text-slate-500">
+                          {includedSteps.length} of {liveSteps.length} steps in guidance
+                        </span>
+                        <span className="text-xs text-slate-600">
+                          Click a step to include / exclude it
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        {liveSteps.map(step => (
+                          <StepCard
+                            key={step.index}
+                            step={step}
+                            onClick={() => handleToggleExclude(step.index)}
+                            onToggleExclude={() => handleToggleExclude(step.index)}
+                          />
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -403,7 +458,7 @@ export default function RunDetailPage(): JSX.Element {
             onSave={handleSaveDocs}
             onGenerate={handleGenerateDocs}
             isGenerating={isGeneratingDocs}
-            hasSteps={currentSteps.length > 0}
+            hasSteps={includedSteps.length > 0}
           />
         )}
       </div>

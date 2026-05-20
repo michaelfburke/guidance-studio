@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI, Part } from '@google/generative-ai'
 import type { LLMProvider, LLMCallOptions } from './provider'
+import { imageMimeType } from '../asset-manager'
 
 export class GeminiProvider implements LLMProvider {
   name = 'gemini'
@@ -13,7 +14,7 @@ export class GeminiProvider implements LLMProvider {
     const { prompt, images, maxTokens = 4096, systemPrompt } = options
 
     const model = this.client.getGenerativeModel({
-      model: 'gemini-1.5-pro',
+      model: 'gemini-2.5-flash',
       systemInstruction: systemPrompt
     })
 
@@ -23,7 +24,7 @@ export class GeminiProvider implements LLMProvider {
       for (const img of images) {
         parts.push({
           inlineData: {
-            mimeType: 'image/png',
+            mimeType: imageMimeType(img),
             data: img.toString('base64')
           }
         })

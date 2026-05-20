@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { LLMProvider, LLMCallOptions } from './provider'
+import { imageMimeType } from '../asset-manager'
 
 export class ClaudeProvider implements LLMProvider {
   name = 'claude'
@@ -20,7 +21,7 @@ export class ClaudeProvider implements LLMProvider {
           type: 'image',
           source: {
             type: 'base64',
-            media_type: 'image/png',
+            media_type: imageMimeType(img),
             data: img.toString('base64')
           }
         })

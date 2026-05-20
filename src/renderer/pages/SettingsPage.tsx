@@ -1,33 +1,44 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { PROVIDERS, type ProviderId } from '../providers'
+
+const DEFAULT_OPENAI_BASE_URL = 'http://localhost:4141/v1'
+const DEFAULT_OPENAI_MODEL = 'gpt-4.1'
 
 interface SettingsState {
   claudeApiKey: string
   geminiApiKey: string
-  defaultProvider: 'claude' | 'gemini'
+  openaiApiKey: string
+  openaiBaseUrl: string
+  openaiModel: string
+  defaultProvider: ProviderId
   toneGuide: string
   linkedDocs: string
 }
 
-interface TestState {
-  claude: 'idle' | 'testing' | 'ok' | 'fail'
-  gemini: 'idle' | 'testing' | 'ok' | 'fail'
-}
+type TestStatus = 'idle' | 'testing' | 'ok' | 'fail'
 
-interface TestError {
-  claude?: string
-  gemini?: string
+type TestState = Record<ProviderId, TestStatus>
+
+type TestError = Partial<Record<ProviderId, string>>
+
+interface CredentialEntry {
+  domain: string
+  username: string
 }
 
 export default function SettingsPage(): JSX.Element {
   const [settings, setSettings] = useState<SettingsState>({
     claudeApiKey: '',
     geminiApiKey: '',
+    openaiApiKey: '',
+    openaiBaseUrl: DEFAULT_OPENAI_BASE_URL,
+    openaiModel: DEFAULT_OPENAI_MODEL,
     defaultProvider: 'claude',
     toneGuide: '',
     linkedDocs: ''
   })
 
-  const [testState, setTestState] = useState<TestState>({ claude: 'idle', gemini: 'idle' })
+  const [testState, setTestState] = useState<TestState>({ claude: 'idle', gemini: 'idle', openai: 'idle' })
   const [testErrors, setTestErrors] = useState<TestError>({})
   const [savedFields, setSavedFields] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState<Set<string>>(new Set())
@@ -35,6 +46,12 @@ export default function SettingsPage(): JSX.Element {
 
   const [showClaudeKey, setShowClaudeKey] = useState(false)
   const [showGeminiKey, setShowGeminiKey] = useState(false)
+  const [showOpenAIKey, setShowOpenAIKey] = useState(false)
+
+  const [credentials, setCredentials] = useState<CredentialEntry[]>([])
+  const [newCred, setNewCred] = useState({ domain: '', username: '', password: '' })
+  const [showNewCredPw, setShowNewCredPw] = useState(false)
+  const [credBusy, setCredBusy] = useState(false)
 
   useEffect(() => {
     const load = async (): Promise<void> => {
@@ -42,14 +59,20 @@ export default function SettingsPage(): JSX.Element {
         const all = await window.electronAPI.settingsGetAll()
         const claudeKey = await window.electronAPI.settingsGet('claudeApiKey') as string | null
         const geminiKey = await window.electronAPI.settingsGet('geminiApiKey') as string | null
+        const openaiKey = await window.electronAPI.settingsGet('openaiApiKey') as string | null
 
         setSettings({
           claudeApiKey: claudeKey || '',
           geminiApiKey: geminiKey || '',
-          defaultProvider: (all.defaultProvider as 'claude' | 'gemini') || 'claude',
+          openaiApiKey: openaiKey || '',
+          openaiBaseUrl: (all.openaiBaseUrl as string) || DEFAULT_OPENAI_BASE_URL,
+          openaiModel: (all.openaiModel as string) || DEFAULT_OPENAI_MODEL,
+          defaultProvider: (all.defaultProvider as ProviderId) || 'claude',
           toneGuide: (all.toneGuide as string) || '',
           linkedDocs: (all.linkedDocs as string) || ''
         })
+
+        setCredentials(await window.electronAPI.credentialsList())
       } catch (err) {
         console.error('Failed to load settings:', err)
       } finally {
@@ -86,7 +109,7 @@ export default function SettingsPage(): JSX.Element {
     }
   }, [])
 
-  const handleTestConnection = useCallback(async (provider: 'claude' | 'gemini'): Promise<void> => {
+  const handleTestConnection = useCallback(async (provider: ProviderId): Promise<void> => {
     setTestState(prev => ({ ...prev, [provider]: 'testing' }))
     setTestErrors(prev => ({ ...prev, [provider]: undefined }))
 
@@ -105,6 +128,38 @@ export default function SettingsPage(): JSX.Element {
     setTimeout(() => {
       setTestState(prev => ({ ...prev, [provider]: 'idle' }))
     }, 5000)
+  }, [])
+
+  const handleAddCredential = useCallback(async (): Promise<void> => {
+    const domain = newCred.domain.trim()
+    if (!domain || !newCred.password) return
+    setCredBusy(true)
+    try {
+      await window.electronAPI.credentialsSet({
+        domain,
+        username: newCred.username.trim(),
+        password: newCred.password
+      })
+      setNewCred({ domain: '', username: '', password: '' })
+      setShowNewCredPw(false)
+      setCredentials(await window.electronAPI.credentialsList())
+    } catch (err) {
+      console.error('Failed to save credential:', err)
+    } finally {
+      setCredBusy(false)
+    }
+  }, [newCred])
+
+  const handleRemoveCredential = useCallback(async (domain: string): Promise<void> => {
+    setCredBusy(true)
+    try {
+      await window.electronAPI.credentialsDelete(domain)
+      setCredentials(await window.electronAPI.credentialsList())
+    } catch (err) {
+      console.error('Failed to delete credential:', err)
+    } finally {
+      setCredBusy(false)
+    }
   }, [])
 
   const FieldSavedBadge = ({ field }: { field: string }): JSX.Element | null => {
@@ -234,7 +289,7 @@ export default function SettingsPage(): JSX.Element {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="badge-gemini">Gemini</span>
-                      <span className="text-xs text-slate-500">Google · gemini-1.5-pro</span>
+                      <span className="text-xs text-slate-500">Google · gemini-2.5-flash</span>
                     </div>
 
                     <div className="relative">
@@ -305,6 +360,199 @@ export default function SettingsPage(): JSX.Element {
                   <FieldSavedBadge field="geminiApiKey" />
                 </div>
               </div>
+
+              {/* OpenAI-compatible */}
+              <div className="p-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="badge-openai">OpenAI</span>
+                  <span className="text-xs text-slate-500">OpenAI-compatible · Copilot, OpenRouter, Ollama</span>
+                </div>
+                <p className="text-xs text-slate-500 mb-3">
+                  Point this at any OpenAI-compatible endpoint. For GitHub Copilot, run the
+                  local <code className="text-slate-300">copilot-api</code> proxy and use its
+                  URL below — no API key required.
+                </p>
+
+                <div className="space-y-2">
+                  <div>
+                    <label className="label">Base URL</label>
+                    <input
+                      type="text"
+                      value={settings.openaiBaseUrl}
+                      onChange={e => setSettings(prev => ({ ...prev, openaiBaseUrl: e.target.value }))}
+                      placeholder={DEFAULT_OPENAI_BASE_URL}
+                      className="input font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Model</label>
+                    <input
+                      type="text"
+                      value={settings.openaiModel}
+                      onChange={e => setSettings(prev => ({ ...prev, openaiModel: e.target.value }))}
+                      placeholder={DEFAULT_OPENAI_MODEL}
+                      className="input font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">API Key <span className="text-slate-600">(optional)</span></label>
+                    <div className="relative">
+                      <input
+                        type={showOpenAIKey ? 'text' : 'password'}
+                        value={settings.openaiApiKey}
+                        onChange={e => setSettings(prev => ({ ...prev, openaiApiKey: e.target.value }))}
+                        placeholder="Leave blank for a local Copilot proxy"
+                        className="input pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowOpenAIKey(!showOpenAIKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                      >
+                        {showOpenAIKey ? (
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                            <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
+                            <circle cx="7" cy="7" r="1.5" />
+                            <path d="M1 1l12 12" />
+                          </svg>
+                        ) : (
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                            <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
+                            <circle cx="7" cy="7" r="1.5" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {testState.openai === 'fail' && testErrors.openai && (
+                  <p className="text-xs text-red-400 mt-2">{testErrors.openai}</p>
+                )}
+
+                <div className="flex items-center gap-2 mt-3">
+                  <button
+                    onClick={() => {
+                      saveField('openaiBaseUrl', settings.openaiBaseUrl)
+                      saveField('openaiModel', settings.openaiModel)
+                      saveField('openaiApiKey', settings.openaiApiKey)
+                    }}
+                    disabled={saving.has('openaiApiKey')}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    {saving.has('openaiApiKey') ? 'Saving...' : 'Save'}
+                  </button>
+
+                  <button
+                    onClick={() => handleTestConnection('openai')}
+                    disabled={testState.openai === 'testing'}
+                    className="btn btn-ghost btn-sm"
+                  >
+                    {testState.openai === 'testing' ? (
+                      <>
+                        <svg className="animate-spin" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                          <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeOpacity="0.3" strokeWidth="1.5" />
+                          <path d="M6 1.5a4.5 4.5 0 014.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                        </svg>
+                        Testing...
+                      </>
+                    ) : testState.openai === 'ok' ? (
+                      <span className="text-green-400">✓ Connected</span>
+                    ) : testState.openai === 'fail' ? (
+                      <span className="text-red-400">✗ Failed</span>
+                    ) : (
+                      'Test Connection'
+                    )}
+                  </button>
+
+                  <FieldSavedBadge field="openaiApiKey" />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Login Credentials */}
+          <section>
+            <h2 className="text-base font-semibold text-slate-100 mb-1">Login Credentials</h2>
+            <p className="text-xs text-slate-500 mb-4">
+              Per-site sign-in credentials, stored in your OS keychain. When an agent run&apos;s
+              URL matches a domain below, the agent signs in automatically. Passwords are typed
+              directly into the site and are never sent to the LLM.
+            </p>
+
+            <div className="card divide-y divide-slate-800">
+              {credentials.length === 0 ? (
+                <div className="p-5 text-xs text-slate-500">No credentials saved yet.</div>
+              ) : (
+                credentials.map(cred => (
+                  <div key={cred.domain} className="p-4 flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="text-sm text-slate-200 font-medium truncate">{cred.domain}</div>
+                      <div className="text-xs text-slate-500 truncate">
+                        {cred.username || <span className="italic">no username</span>} · ••••••••
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleRemoveCredential(cred.domain)}
+                      disabled={credBusy}
+                      className="btn btn-ghost btn-sm text-red-400 hover:text-red-300"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))
+              )}
+
+              {/* Add form */}
+              <div className="p-5 space-y-3">
+                <div className="text-xs font-medium text-slate-400">Add credentials</div>
+                <input
+                  value={newCred.domain}
+                  onChange={e => setNewCred(prev => ({ ...prev, domain: e.target.value }))}
+                  placeholder="Domain (e.g. thelandapp.com)"
+                  className="input"
+                />
+                <input
+                  value={newCred.username}
+                  onChange={e => setNewCred(prev => ({ ...prev, username: e.target.value }))}
+                  placeholder="Username or email"
+                  className="input"
+                />
+                <div className="relative">
+                  <input
+                    type={showNewCredPw ? 'text' : 'password'}
+                    value={newCred.password}
+                    onChange={e => setNewCred(prev => ({ ...prev, password: e.target.value }))}
+                    placeholder="Password"
+                    className="input pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCredPw(!showNewCredPw)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  >
+                    {showNewCredPw ? (
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                        <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
+                        <circle cx="7" cy="7" r="1.5" />
+                        <path d="M1 1l12 12" />
+                      </svg>
+                    ) : (
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                        <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
+                        <circle cx="7" cy="7" r="1.5" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+                <button
+                  onClick={handleAddCredential}
+                  disabled={credBusy || !newCred.domain.trim() || !newCred.password}
+                  className="btn btn-secondary btn-sm"
+                >
+                  {credBusy ? 'Saving...' : 'Add Credentials'}
+                </button>
+              </div>
             </div>
           </section>
 
@@ -315,35 +563,36 @@ export default function SettingsPage(): JSX.Element {
               The default LLM provider used when creating new runs.
             </p>
 
-            <div className="grid grid-cols-2 gap-3">
-              {(['claude', 'gemini'] as const).map(provider => (
-                <button
-                  key={provider}
-                  type="button"
-                  onClick={() => {
-                    setSettings(prev => ({ ...prev, defaultProvider: provider }))
-                    saveField('defaultProvider', provider)
-                  }}
-                  className={`
-                    p-3 rounded-xl border-2 text-left transition-all
-                    ${settings.defaultProvider === provider
-                      ? provider === 'claude' ? 'border-orange-600/70 bg-orange-900/10' : 'border-blue-600/70 bg-blue-900/10'
-                      : 'border-slate-800 bg-slate-900 hover:border-slate-700'
-                    }
-                  `}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className={provider === 'claude' ? 'badge-claude' : 'badge-gemini'}>
-                      {provider === 'claude' ? 'Claude' : 'Gemini'}
-                    </span>
-                    {settings.defaultProvider === provider && (
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={provider === 'claude' ? 'text-orange-400' : 'text-blue-400'}>
-                        <path d="M2 7l3.5 3.5L12 3" />
-                      </svg>
-                    )}
-                  </div>
-                </button>
-              ))}
+            <div className="grid grid-cols-3 gap-3">
+              {PROVIDERS.map(meta => {
+                const selected = settings.defaultProvider === meta.id
+                return (
+                  <button
+                    key={meta.id}
+                    type="button"
+                    onClick={() => {
+                      setSettings(prev => ({ ...prev, defaultProvider: meta.id }))
+                      saveField('defaultProvider', meta.id)
+                    }}
+                    className={`
+                      p-3 rounded-xl border-2 text-left transition-all
+                      ${selected
+                        ? meta.accentBorder
+                        : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+                      }
+                    `}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={meta.badgeClass}>{meta.label}</span>
+                      {selected && (
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={meta.accentText}>
+                          <path d="M2 7l3.5 3.5L12 3" />
+                        </svg>
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           </section>
 
@@ -410,7 +659,7 @@ export default function SettingsPage(): JSX.Element {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Agent mode</span>
-                <span className="text-slate-300">Simulated (v1.0)</span>
+                <span className="text-slate-300">Live browser (Playwright)</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Claude model</span>
@@ -418,7 +667,11 @@ export default function SettingsPage(): JSX.Element {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Gemini model</span>
-                <span className="text-slate-300 font-mono text-xs">gemini-1.5-pro</span>
+                <span className="text-slate-300 font-mono text-xs">gemini-2.5-flash</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">OpenAI model</span>
+                <span className="text-slate-300 font-mono text-xs">{settings.openaiModel || DEFAULT_OPENAI_MODEL}</span>
               </div>
               <div className="border-t border-slate-800 pt-2 mt-2">
                 <div className="flex justify-between text-sm">
