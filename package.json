@@ -2,7 +2,8 @@
   "name": "guidance-studio",
   "version": "1.0.0",
   "description": "AI-powered documentation generation tool",
-  "main": "dist-electron/main/main.js",
+  "main": "out/main/main.js",
+  "type": "module",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",

@@ -3,8 +3,7 @@ productName: GuidanceStudio
 directories:
   output: release
 files:
-  - dist-electron
-  - dist
+  - out
   - '!**/.vscode/*'
   - '!src/*'
   - '!electron.vite.config.{js,ts}'
