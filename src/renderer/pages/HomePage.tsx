@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import RunCard from '../components/RunCard'
 import type { RunMeta } from '../types'
@@ -9,6 +9,7 @@ export default function HomePage(): JSX.Element {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'agent' | 'assisted'>('all')
   const [search, setSearch] = useState('')
+  const [groupByProduct, setGroupByProduct] = useState(true)
 
   const loadRuns = useCallback(async () => {
     setLoading(true)
@@ -44,6 +45,33 @@ export default function HomePage(): JSX.Element {
     return true
   })
 
+  // Group filteredRuns by productName for the product view, sorted by most recently active
+  const productGroups = useMemo(() => {
+    const groups: Record<string, RunMeta[]> = {}
+    for (const run of filteredRuns) {
+      const key = run.productName || 'Unnamed'
+      if (!groups[key]) groups[key] = []
+      groups[key].push(run)
+    }
+    return Object.entries(groups).sort(
+      ([, a], [, b]) => new Date(b[0].createdAt).getTime() - new Date(a[0].createdAt).getTime()
+    )
+  }, [filteredRuns])
+
+  const handleNewFeatureForProduct = useCallback((productRuns: RunMeta[]): void => {
+    const mostRecent = productRuns[0]
+    navigate('/runs/new', {
+      state: {
+        prefill: {
+          productName: mostRecent.productName,
+          url: mostRecent.url ?? '',
+          mode: mostRecent.mode,
+          provider: mostRecent.provider
+        }
+      }
+    })
+  }, [navigate])
+
   const stats = {
     total: runs.length,
     completed: runs.filter(r => r.status === 'completed').length,
@@ -56,11 +84,11 @@ export default function HomePage(): JSX.Element {
       <div className="px-6 py-5 border-b border-slate-800/60">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-slate-100">Runs</h1>
+            <h1 className="text-xl font-bold text-slate-100">Documentation</h1>
             <p className="text-sm text-slate-500 mt-0.5">
               {stats.total === 0
-                ? 'No runs yet'
-                : `${stats.total} total · ${stats.completed} completed${stats.running > 0 ? ` · ${stats.running} running` : ''}`
+                ? 'No features documented yet'
+                : `${stats.completed} feature${stats.completed !== 1 ? 's' : ''} documented${stats.running > 0 ? ` · ${stats.running} running` : ''}`
               }
             </p>
           </div>
@@ -72,7 +100,7 @@ export default function HomePage(): JSX.Element {
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               <path d="M8 3v10M3 8h10" />
             </svg>
-            New Run
+            Document feature
           </button>
         </div>
 
@@ -95,6 +123,22 @@ export default function HomePage(): JSX.Element {
                 </button>
               ))}
             </div>
+
+            {/* Group by product toggle */}
+            <button
+              onClick={() => setGroupByProduct(prev => !prev)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-colors border ${
+                groupByProduct
+                  ? 'bg-slate-700 text-slate-100 border-slate-600'
+                  : 'border-slate-800 text-slate-500 hover:text-slate-300'
+              }`}
+              title={groupByProduct ? 'Switch to flat list' : 'Group by product'}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M1 3h10M1 6h6M1 9h4" />
+              </svg>
+              By product
+            </button>
 
             {/* Search */}
             <div className="relative flex-1 max-w-xs">
@@ -145,10 +189,10 @@ export default function HomePage(): JSX.Element {
               </svg>
             </div>
             <div className="text-center">
-              <h2 className="text-lg font-semibold text-slate-200 mb-2">No runs yet</h2>
+              <h2 className="text-lg font-semibold text-slate-200 mb-2">No features documented yet</h2>
               <p className="text-slate-500 text-sm max-w-sm">
-                Create your first run to start generating AI-powered documentation
-                for your product features.
+                Document your first feature to start building your product's
+                AI-powered documentation library.
               </p>
             </div>
             <button
@@ -158,7 +202,7 @@ export default function HomePage(): JSX.Element {
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                 <path d="M8 3v10M3 8h10" />
               </svg>
-              Create First Run
+              Document First Feature
             </button>
           </div>
         ) : filteredRuns.length === 0 ? (
@@ -172,7 +216,41 @@ export default function HomePage(): JSX.Element {
               <div className="text-sm mt-1">Try adjusting your filters</div>
             </div>
           </div>
+        ) : groupByProduct ? (
+          // Product-grouped view
+          <div className="space-y-8">
+            {productGroups.map(([productName, productRuns]) => {
+              const completedCount = productRuns.filter(r => r.status === 'completed').length
+              return (
+                <div key={productName}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <h2 className="text-sm font-semibold text-slate-200 truncate">{productName}</h2>
+                      <span className="text-xs text-slate-600 shrink-0">
+                        {completedCount} of {productRuns.length} documented
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => handleNewFeatureForProduct(productRuns)}
+                      className="btn btn-secondary btn-sm shrink-0 ml-4"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                        <path d="M6 2v8M2 6h8" />
+                      </svg>
+                      New feature
+                    </button>
+                  </div>
+                  <div className="grid gap-2">
+                    {productRuns.map(run => (
+                      <RunCard key={run.id} run={run} onDelete={handleDelete} />
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         ) : (
+          // Flat list view
           <div className="grid gap-3">
             {filteredRuns.map(run => (
               <RunCard

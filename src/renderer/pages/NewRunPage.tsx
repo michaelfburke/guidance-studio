@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import type { AppSettings } from '../types'
+import type { AppSettings, RunMeta } from '../types'
 import { PROVIDERS, providerMeta, type ProviderId } from '../providers'
 
 function hostOf(url: string): string {
@@ -45,11 +45,15 @@ export default function NewRunPage(): JSX.Element {
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({})
   const [settings, setSettings] = useState<Partial<AppSettings>>({})
   const [savedDomains, setSavedDomains] = useState<string[]>([])
+  const [recentProducts, setRecentProducts] = useState<Array<{ productName: string; url: string; domain: string }>>([])
+
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [requiresOverride, setRequiresOverride] = useState(false)
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
   const overrideGrantedRef = useRef(false)
   const formRef = useRef<HTMLFormElement>(null)
+  // If prefill included a productName, treat it as user-set so URL changes don't override it
+  const productNameEditedRef = useRef(!!prefill?.productName)
 
   const showError = useCallback((msg: string) => {
     setErrorBanner(msg)
@@ -67,6 +71,23 @@ export default function NewRunPage(): JSX.Element {
 
     window.electronAPI.credentialsList()
       .then(list => setSavedDomains(list.map(c => c.domain)))
+      .catch(console.error)
+
+    // Build recent-products list from run history for productName auto-fill.
+    // Already sorted newest-first, so first match per domain wins.
+    window.electronAPI.runList()
+      .then((allRuns: RunMeta[]) => {
+        const seen = new Set<string>()
+        const products: Array<{ productName: string; url: string; domain: string }> = []
+        for (const run of allRuns) {
+          if (!run.url || !run.productName) continue
+          const domain = hostOf(run.url)
+          if (!domain || seen.has(domain)) continue
+          seen.add(domain)
+          products.push({ productName: run.productName, url: run.url, domain })
+        }
+        setRecentProducts(products)
+      })
       .catch(console.error)
   }, [])
 
@@ -142,6 +163,21 @@ export default function NewRunPage(): JSX.Element {
     setForm(prev => ({ ...prev, [key]: value }))
     if (errors[key]) setErrors(prev => ({ ...prev, [key]: undefined }))
     if (key === 'provider' || key === 'mode') setRequiresOverride(false)
+    if (key === 'productName') productNameEditedRef.current = true
+  }
+
+  const handleUrlChange = (value: string): void => {
+    update('url', value)
+    // Auto-fill productName from run history when the field hasn't been manually edited
+    if (!productNameEditedRef.current) {
+      const domain = hostOf(value)
+      if (domain) {
+        const match = recentProducts.find(p => domain === p.domain || domain.endsWith(`.${p.domain}`))
+        if (match) {
+          setForm(prev => ({ ...prev, url: value, productName: match.productName }))
+        }
+      }
+    }
   }
 
   // OpenAI-compatible endpoints work with a local proxy and built-in defaults,
@@ -351,7 +387,16 @@ export default function NewRunPage(): JSX.Element {
               onChange={e => update('productName', e.target.value)}
               placeholder="e.g., Acme Dashboard, Linear, Notion..."
               className="input"
+              list="gs-recent-product-names"
+              autoComplete="off"
             />
+            {recentProducts.length > 0 && (
+              <datalist id="gs-recent-product-names">
+                {recentProducts.map(p => (
+                  <option key={p.domain} value={p.productName} />
+                ))}
+              </datalist>
+            )}
             <p className="text-xs text-slate-600 mt-1">
               {form.mode === 'agent' ? 'Will be inferred from URL if left blank' : 'Optional – used in generated docs'}
             </p>
@@ -366,7 +411,7 @@ export default function NewRunPage(): JSX.Element {
               <input
                 type="url"
                 value={form.url}
-                onChange={e => update('url', e.target.value)}
+                onChange={e => handleUrlChange(e.target.value)}
                 placeholder="https://app.example.com"
                 list="gs-saved-sites"
                 className={`input ${errors.url ? 'input-error' : ''}`}
