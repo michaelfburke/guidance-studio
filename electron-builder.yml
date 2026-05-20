@@ -1,4 +1,7 @@
 appId: com.guidancestudio.app
+publish:
+  provider: github
+  releaseType: release
 productName: GuidanceStudio
 directories:
   output: release
