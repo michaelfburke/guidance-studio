@@ -1,0 +1,24 @@
+appId: com.guidancestudio.app
+productName: GuidanceStudio
+directories:
+  output: release
+files:
+  - dist-electron
+  - dist
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts}'
+  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+win:
+  target:
+    - target: nsis
+  artifactName: ${name}-${version}-Setup.${ext}
+mac:
+  target:
+    - target: dmg
+  artifactName: ${name}-${version}.${ext}
+linux:
+  target:
+    - target: AppImage
+  artifactName: ${name}-${version}.${ext}
