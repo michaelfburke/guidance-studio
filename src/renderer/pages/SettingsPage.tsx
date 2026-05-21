@@ -21,6 +21,7 @@ interface SettingsState {
   copilotConnected: boolean
   copilotModel: string
   defaultProvider: ProviderId
+  headlessBrowser: boolean
   toneGuide: string
   linkedDocs: string
 }
@@ -83,6 +84,7 @@ export default function SettingsPage(): JSX.Element {
     copilotConnected: false,
     copilotModel: DEFAULT_COPILOT_MODEL,
     defaultProvider: 'claude',
+    headlessBrowser: false,
     toneGuide: '',
     linkedDocs: ''
   })
@@ -138,6 +140,7 @@ export default function SettingsPage(): JSX.Element {
           copilotConnected: !!(all.copilotConnected),
           copilotModel: (all.copilotModel as string) || DEFAULT_COPILOT_MODEL,
           defaultProvider: (all.defaultProvider as ProviderId) || 'claude',
+          headlessBrowser: !!(all.headlessBrowser),
           toneGuide: (all.toneGuide as string) || '',
           linkedDocs: (all.linkedDocs as string) || ''
         })
@@ -745,6 +748,39 @@ export default function SettingsPage(): JSX.Element {
                   </button>
                 )
               })}
+            </div>
+          </section>
+
+          {/* Agent Behavior */}
+          <section>
+            <h2 className="text-base font-semibold text-slate-100 mb-1">Agent Behavior</h2>
+            <p className="text-xs text-slate-500 mb-4">
+              Control how the browser runs during agent captures.
+            </p>
+            <div className="card p-5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm font-medium text-slate-200">Invisible browser mode</div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    Run the browser in the background without a visible window. Screenshots are still captured.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={settings.headlessBrowser}
+                  onClick={() => {
+                    const next = !settings.headlessBrowser
+                    setSettings(prev => ({ ...prev, headlessBrowser: next }))
+                    saveField('headlessBrowser', next)
+                  }}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${settings.headlessBrowser ? 'bg-brand-500' : 'bg-slate-700'}`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200 ${settings.headlessBrowser ? 'translate-x-5' : 'translate-x-0'}`}
+                  />
+                </button>
+              </div>
             </div>
           </section>
 

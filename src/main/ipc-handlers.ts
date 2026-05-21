@@ -154,8 +154,11 @@ export function registerIpcHandlers(): void {
     // Look up stored login credentials matching this URL's domain, if any.
     const credentials = await getCredentialForUrl(url)
 
+    const agentSettings = loadSettings()
+    const headless = !!(agentSettings.headlessBrowser)
+
     // Start agent in background
-    runAgent({ runId, url, productName, feature, goal, llmProvider, credentials })
+    runAgent({ runId, url, productName, feature, goal, llmProvider, credentials, headless })
       .catch(err => console.error('Agent error:', err))
 
     return { success: true, runId }
