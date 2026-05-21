@@ -5,7 +5,7 @@ import { app } from 'electron'
 export interface RunMeta {
   id: string
   mode: 'agent' | 'assisted'
-  provider: 'claude' | 'gemini' | 'openai'
+  provider: 'claude' | 'gemini' | 'openai' | 'openrouter' | 'copilot'
   productName: string
   feature: string
   goal: string

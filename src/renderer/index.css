@@ -103,6 +103,14 @@
     @apply badge bg-teal-900/60 text-teal-300 border border-teal-800/60;
   }
 
+  .badge-openrouter {
+    @apply badge bg-violet-900/60 text-violet-300 border border-violet-800/60;
+  }
+
+  .badge-copilot {
+    @apply badge bg-sky-900/60 text-sky-300 border border-sky-800/60;
+  }
+
   .status-running {
     @apply badge bg-amber-900/60 text-amber-300 border border-amber-800/60;
   }

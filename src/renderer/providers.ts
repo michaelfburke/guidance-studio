@@ -1,4 +1,4 @@
-export type ProviderId = 'claude' | 'gemini' | 'openai'
+export type ProviderId = 'claude' | 'gemini' | 'openai' | 'openrouter' | 'copilot'
 
 export interface ProviderMeta {
   id: ProviderId
@@ -33,10 +33,26 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     id: 'openai',
     label: 'OpenAI',
-    vendor: 'Copilot / OpenRouter',
+    vendor: 'OpenAI-compatible',
     badgeClass: 'badge-openai',
     accentBorder: 'border-teal-600/70 bg-teal-900/10',
     accentText: 'text-teal-400'
+  },
+  {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    vendor: 'multi-model',
+    badgeClass: 'badge-openrouter',
+    accentBorder: 'border-violet-600/70 bg-violet-900/10',
+    accentText: 'text-violet-400'
+  },
+  {
+    id: 'copilot',
+    label: 'Copilot',
+    vendor: 'by GitHub',
+    badgeClass: 'badge-copilot',
+    accentBorder: 'border-sky-600/70 bg-sky-900/10',
+    accentText: 'text-sky-400'
   }
 ]
 
