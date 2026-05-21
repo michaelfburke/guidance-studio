@@ -113,7 +113,7 @@ export interface RunStep {
 export interface RunMeta {
   id: string
   mode: 'agent' | 'assisted'
-  provider: 'claude' | 'gemini' | 'openai' | 'openrouter' | 'copilot'
+  provider: 'claude' | 'gemini' | 'openai' | 'openrouter' | 'copilot' | 'github-models'
   productName: string
   feature: string
   goal: string

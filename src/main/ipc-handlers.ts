@@ -36,6 +36,8 @@ const DEFAULT_OPENAI_BASE_URL = 'http://localhost:4141/v1'
 const DEFAULT_OPENAI_MODEL = 'gpt-4.1'
 const DEFAULT_OPENROUTER_MODEL = 'anthropic/claude-sonnet-4-5'
 const DEFAULT_COPILOT_MODEL = 'gpt-4o'
+const GITHUB_MODELS_BASE_URL = 'https://models.inference.ai.azure.com'
+const DEFAULT_GITHUB_MODELS_MODEL = 'gpt-4o'
 
 const KEYTAR_SERVICE = 'guidance-studio'
 
@@ -100,6 +102,13 @@ async function buildProvider(provider: string): Promise<LLMProvider> {
     if (!githubToken) throw new Error('GitHub Copilot is not connected. Please authorise it in Settings.')
     const model = (settings.copilotModel as string) || DEFAULT_COPILOT_MODEL
     return new CopilotProvider(githubToken, model)
+  }
+
+  if (provider === 'github-models') {
+    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, 'github-models')
+    if (!apiKey) throw new Error('No GitHub PAT found for GitHub Models. Please configure it in Settings.')
+    const model = (settings.githubModelsModel as string) || DEFAULT_GITHUB_MODELS_MODEL
+    return new OpenAIProvider({ apiKey, baseURL: GITHUB_MODELS_BASE_URL, model })
   }
 
   throw new Error(`Unknown provider: ${provider}`)
@@ -202,6 +211,9 @@ export function registerIpcHandlers(): void {
     if (key === 'openaiApiKey') {
       return keytar.getPassword(KEYTAR_SERVICE, 'openai')
     }
+    if (key === 'githubModelsApiKey') {
+      return keytar.getPassword(KEYTAR_SERVICE, 'github-models')
+    }
 
     const settings = loadSettings()
     return settings[key] ?? null
@@ -233,6 +245,14 @@ export function registerIpcHandlers(): void {
       }
       return { success: true }
     }
+    if (key === 'githubModelsApiKey') {
+      if (value && typeof value === 'string') {
+        await keytar.setPassword(KEYTAR_SERVICE, 'github-models', value)
+      } else {
+        await keytar.deletePassword(KEYTAR_SERVICE, 'github-models')
+      }
+      return { success: true }
+    }
 
     const settings = loadSettings()
     if (value === null || value === undefined) {
@@ -246,12 +266,13 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('settings:getAll', async () => {
     const settings = loadSettings()
-    const [claudeKey, geminiKey, openaiKey, openrouterKey, copilotKey] = await Promise.all([
+    const [claudeKey, geminiKey, openaiKey, openrouterKey, copilotKey, githubModelsKey] = await Promise.all([
       keytar.getPassword(KEYTAR_SERVICE, 'claude'),
       keytar.getPassword(KEYTAR_SERVICE, 'gemini'),
       keytar.getPassword(KEYTAR_SERVICE, 'openai'),
       keytar.getPassword(KEYTAR_SERVICE, 'openrouter'),
-      keytar.getPassword(KEYTAR_SERVICE, 'copilot')
+      keytar.getPassword(KEYTAR_SERVICE, 'copilot'),
+      keytar.getPassword(KEYTAR_SERVICE, 'github-models')
     ])
 
     return {
@@ -260,7 +281,8 @@ export function registerIpcHandlers(): void {
       geminiApiKeySet: !!geminiKey,
       openaiApiKeySet: !!openaiKey,
       openrouterConnected: !!openrouterKey,
-      copilotConnected: !!copilotKey
+      copilotConnected: !!copilotKey,
+      githubModelsApiKeySet: !!githubModelsKey
     }
   })
 

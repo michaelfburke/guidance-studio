@@ -17,7 +17,7 @@ export interface RunStep {
 export interface RunMeta {
   id: string
   mode: 'agent' | 'assisted'
-  provider: 'claude' | 'gemini' | 'openai'
+  provider: 'claude' | 'gemini' | 'openai' | 'openrouter' | 'copilot' | 'github-models'
   productName: string
   feature: string
   goal: string
@@ -35,16 +35,22 @@ export interface RunData {
 }
 
 export interface AppSettings {
-  defaultProvider: 'claude' | 'gemini' | 'openai'
+  defaultProvider: 'claude' | 'gemini' | 'openai' | 'openrouter' | 'copilot' | 'github-models'
   toneGuide: string
   linkedDocs: string
   claudeApiKeySet?: boolean
   geminiApiKeySet?: boolean
   openaiApiKeySet?: boolean
+  openrouterConnected?: boolean
+  copilotConnected?: boolean
+  githubModelsApiKeySet?: boolean
   claudeModel?: string
   geminiModel?: string
   openaiBaseUrl?: string
   openaiModel?: string
+  openrouterModel?: string
+  copilotModel?: string
+  githubModelsModel?: string
 }
 
 export interface ElectronAPI {
@@ -103,6 +109,16 @@ export interface ElectronAPI {
   recordingSave: (params: { runId: string; index: number; data: string }) => Promise<{ success: boolean; filePath: string }>
   recordingScreenAccess: () => Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>
   recordingOpenScreenSettings: () => Promise<{ success: boolean }>
+
+  // Auth — OpenRouter
+  openrouterConnect: () => Promise<{ success: boolean; error?: string }>
+  openrouterDisconnect: () => Promise<{ success: boolean }>
+
+  // Auth — GitHub Copilot (device flow)
+  copilotClientConfigured: () => Promise<{ configured: boolean }>
+  copilotStartDeviceFlow: () => Promise<{ success: boolean; userCode: string; verificationUri: string; deviceCode: string; interval: number; error?: string }>
+  copilotPoll: (deviceCode: string, interval: number) => Promise<{ success: boolean; error?: string }>
+  copilotDisconnect: () => Promise<{ success: boolean }>
 
   // Utility
   openExternal: (url: string) => Promise<{ success: boolean }>
