@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, nativeTheme, protocol, net } from 'electron'
+import { app, BrowserWindow, shell, nativeTheme, protocol, net, session, desktopCapturer, systemPreferences } from 'electron'
 import path from 'path'
 import { pathToFileURL } from 'url'
 import { registerIpcHandlers } from './ipc-handlers'
@@ -37,6 +37,48 @@ function registerAssetProtocol(): void {
     } catch {
       return new Response('Not found', { status: 404 })
     }
+  })
+}
+
+// Denying a request that asked for video makes Electron throw
+// "Video was requested, but no video stream was provided". That throw is
+// expected — the renderer's getDisplayMedia() rejects and shows our error
+// UI — so swallow it here to avoid an unhandled main-process rejection.
+function denyDisplayMedia(callback: (streams: Electron.Streams) => void): void {
+  try {
+    callback({})
+  } catch {
+    /* renderer handles the rejection */
+  }
+}
+
+// Electron disables getDisplayMedia() unless the main process supplies a
+// source. Without this handler the renderer's ScreenRecorder rejects with
+// "Not supported". We capture the primary screen via desktopCapturer.
+function registerDisplayMediaHandler(): void {
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    desktopCapturer
+      .getSources({ types: ['screen'] })
+      .then(sources => {
+        if (sources.length > 0) {
+          callback({ video: sources[0] })
+        } else {
+          // No capturable source (e.g. screen-recording permission denied).
+          denyDisplayMedia(callback)
+        }
+      })
+      .catch(() => denyDisplayMedia(callback))
+  })
+}
+
+// On macOS the app must attempt screen capture at least once before it shows
+// up under System Settings → Privacy & Security → Screen Recording. Until
+// then the user has nothing to toggle. Prime that registration on startup.
+function primeScreenCapturePermission(): void {
+  if (process.platform !== 'darwin') return
+  if (systemPreferences.getMediaAccessStatus('screen') === 'granted') return
+  desktopCapturer.getSources({ types: ['screen'] }).catch(() => {
+    /* expected to fail until permission is granted */
   })
 }
 
@@ -84,6 +126,8 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   registerAssetProtocol()
+  registerDisplayMediaHandler()
+  primeScreenCapturePermission()
   registerIpcHandlers()
   createWindow()
 

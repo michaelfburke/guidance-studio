@@ -6,6 +6,7 @@ interface StepCardProps {
   isSelected?: boolean
   onClick?: () => void
   onDelete?: () => void
+  onEdit?: () => void
   onToggleExclude?: () => void
   showDelete?: boolean
 }
@@ -15,6 +16,7 @@ export default function StepCard({
   isSelected = false,
   onClick,
   onDelete,
+  onEdit,
   onToggleExclude,
   showDelete = false
 }: StepCardProps): JSX.Element {
@@ -118,20 +120,32 @@ export default function StepCard({
         </p>
       </div>
 
-      {/* Delete button */}
-      {showDelete && onDelete && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onDelete()
-          }}
-          className="absolute top-2.5 right-2.5 p-1 rounded text-slate-600 hover:text-red-400 hover:bg-red-900/20 transition-colors opacity-0 group-hover:opacity-100"
-          title="Remove step"
-        >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-            <path d="M9 3L3 9M3 3l6 6" />
-          </svg>
-        </button>
+      {/* Edit + Delete buttons grouped at bottom-right */}
+      {(onEdit || (showDelete && onDelete)) && (
+        <div className="absolute bottom-2.5 right-2.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 z-10">
+          {onEdit && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onEdit() }}
+              className="p-1 rounded text-slate-500 hover:text-slate-200 hover:bg-slate-700 transition-colors"
+              title="Edit step"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8.5 1.5l2 2L4 10H2v-2L8.5 1.5z" />
+              </svg>
+            </button>
+          )}
+          {showDelete && onDelete && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete() }}
+              className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-900/20 transition-colors"
+              title="Remove step"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M9 3L3 9M3 3l6 6" />
+              </svg>
+            </button>
+          )}
+        </div>
       )}
     </div>
   )

@@ -101,6 +101,8 @@ export interface ElectronAPI {
 
   // Recordings
   recordingSave: (params: { runId: string; index: number; data: string }) => Promise<{ success: boolean; filePath: string }>
+  recordingScreenAccess: () => Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>
+  recordingOpenScreenSettings: () => Promise<{ success: boolean }>
 
   // Utility
   openExternal: (url: string) => Promise<{ success: boolean }>
