@@ -35,6 +35,14 @@ interface AgentAction {
 
 const MAX_STEPS = 16
 
+// How many times to re-prompt the LLM when its reply cannot be parsed into a
+// valid action, before giving up on the run.
+const MAX_DECIDE_ATTEMPTS = 3
+
+const VALID_ACTIONS: ReadonlyArray<AgentAction['action']> = [
+  'click', 'type', 'navigate', 'scroll', 'done'
+]
+
 const activeAgents = new Map<string, { stopped: boolean }>()
 // Per-run event logs, persisted so the activity log survives reloads.
 const runEventLogs = new Map<string, AgentEvent[]>()
@@ -94,6 +102,9 @@ export async function runAgent(params: {
   const browser = new BrowserAgent()
   const steps: RunStep[] = []
   const history: string[] = []
+  // Set when the loop exits because of an error, so the run is reported as
+  // failed rather than completed.
+  let failureReason: string | null = null
 
   try {
     emitEvent(runId, 'info', `Launching browser for: ${goal}`)
@@ -117,7 +128,8 @@ export async function runAgent(params: {
       try {
         snap = await browser.snapshot()
       } catch (err) {
-        emitEvent(runId, 'error', `Could not read the page: ${errMessage(err)}`)
+        failureReason = `Could not read the page: ${errMessage(err)}`
+        emitEvent(runId, 'error', failureReason)
         break
       }
 
@@ -128,20 +140,31 @@ export async function runAgent(params: {
       let action: AgentAction
       try {
         // Send a downscaled image to the LLM; the full-res PNG is kept on disk.
-        action = await decideAction(provider, toLLMImage(snap.screenshot), {
-          productName,
-          feature,
-          goal,
-          url: snap.url,
-          pageTitle: snap.title,
-          stepNumber: stepNum,
-          maxSteps: MAX_STEPS,
-          elements: snap.elements,
-          history,
-          hasCredentials: credentials !== null
-        })
+        action = await decideAction(
+          provider,
+          toLLMImage(snap.screenshot),
+          {
+            productName,
+            feature,
+            goal,
+            url: snap.url,
+            pageTitle: snap.title,
+            stepNumber: stepNum,
+            maxSteps: MAX_STEPS,
+            elements: snap.elements,
+            history,
+            hasCredentials: credentials !== null
+          },
+          info => emitEvent(
+            runId,
+            'info',
+            `LLM reply was not usable (${info.reason}) — asking it to correct `
+              + `(attempt ${info.attempt}/${info.maxAttempts})`
+          )
+        )
       } catch (err) {
-        emitEvent(runId, 'error', `LLM could not decide the next step: ${errMessage(err)}`)
+        failureReason = `LLM could not decide the next step: ${errMessage(err)}`
+        emitEvent(runId, 'error', failureReason)
         break
       }
 
@@ -179,9 +202,23 @@ export async function runAgent(params: {
       }
     }
 
-    const finalStatus: RunMeta['status'] = isStopped(runId) ? 'stopped' : 'completed'
+    let finalStatus: RunMeta['status']
+    if (isStopped(runId)) {
+      finalStatus = 'stopped'
+    } else if (failureReason) {
+      finalStatus = 'failed'
+    } else {
+      finalStatus = 'completed'
+    }
+
     if (finalStatus === 'completed') {
       emitEvent(runId, 'complete', `Agent completed. Captured ${steps.length} steps.`)
+    } else if (finalStatus === 'failed') {
+      emitEvent(
+        runId,
+        'error',
+        `Run ended early — captured ${steps.length} step(s) before the agent could not continue.`
+      )
     }
     finalize(runId, steps, finalStatus)
   } catch (err) {
@@ -201,18 +238,56 @@ export function stopAgent(runId: string): void {
   }
 }
 
+interface DecideRetryInfo {
+  attempt: number
+  maxAttempts: number
+  reason: string
+}
+
 async function decideAction(
   llm: LLMProvider,
   screenshot: Buffer,
-  ctx: AgentActionContext
+  ctx: AgentActionContext,
+  onRetry?: (info: DecideRetryInfo) => void
 ): Promise<AgentAction> {
-  const raw = await llm.call({
-    prompt: buildAgentActionPrompt(ctx),
-    images: [screenshot],
-    maxTokens: 1024,
-    systemPrompt: AGENT_SYSTEM_PROMPT
-  })
+  const basePrompt = buildAgentActionPrompt(ctx)
+  let lastError = ''
 
+  // Re-prompt on a malformed reply: a single bad JSON response from the model
+  // should not abort the whole run.
+  for (let attempt = 1; attempt <= MAX_DECIDE_ATTEMPTS; attempt++) {
+    const prompt = attempt === 1
+      ? basePrompt
+      : `${basePrompt}\n\nYour previous reply could not be used: ${lastError}\n`
+        + `Reply again with ONLY the JSON object — no markdown fences, no commentary. `
+        + `Escape any double quote inside a string value as \\", and do not put `
+        + `quotation marks around words in "title" or "description".`
+
+    const raw = await llm.call({
+      prompt,
+      images: [screenshot],
+      maxTokens: 1024,
+      systemPrompt: AGENT_SYSTEM_PROMPT
+    })
+
+    try {
+      return parseAgentAction(raw)
+    } catch (err) {
+      lastError = errMessage(err)
+      if (attempt < MAX_DECIDE_ATTEMPTS) {
+        onRetry?.({ attempt, maxAttempts: MAX_DECIDE_ATTEMPTS, reason: lastError })
+      }
+    }
+  }
+
+  throw new Error(`no usable action after ${MAX_DECIDE_ATTEMPTS} attempts (${lastError})`)
+}
+
+/**
+ * Extracts and validates an AgentAction from a raw LLM reply. Throws on any
+ * malformed or incomplete response so the caller can re-prompt.
+ */
+function parseAgentAction(raw: string): AgentAction {
   let json = raw.trim()
   // Strip markdown fences if the model added them anyway.
   json = json.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '')
@@ -225,7 +300,12 @@ async function decideAction(
 
   const parsed = JSON.parse(json) as AgentAction
   if (!parsed || typeof parsed.action !== 'string') {
-    throw new Error('LLM response had no valid action')
+    throw new Error('reply had no "action" field')
+  }
+  if (!VALID_ACTIONS.includes(parsed.action)) {
+    throw new Error(
+      `"action" was "${parsed.action}" — must be one of ${VALID_ACTIONS.join(', ')}`
+    )
   }
   parsed.title = parsed.title?.trim() || `Step (${parsed.action})`
   parsed.description = parsed.description?.trim() || ''

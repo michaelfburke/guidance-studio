@@ -85,7 +85,10 @@ Guidance:
 - Use "navigate" only when you must jump directly to a specific URL.
 - ${doneGuidance} Describe the end state in the description.
 - The "description" becomes published documentation — make it clear, specific, and
-  grounded in what is actually visible in the screenshot.`
+  grounded in what is actually visible in the screenshot.
+- Return strictly valid JSON: escape any double quote inside a string value as \\",
+  and never put double quotes around words in "title" or "description" — use
+  single quotes if you need to quote a UI label.`
 }
 
 export function buildDocGenerationPrompt(
