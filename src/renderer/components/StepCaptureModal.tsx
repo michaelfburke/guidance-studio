@@ -1,9 +1,11 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
 interface StepCaptureModalProps {
   isOpen: boolean
   screenshotDataUrl: string | null
   stepNumber: number
+  initialTitle?: string
+  initialDescription?: string
   onConfirm: (title: string, description: string) => void
   onCancel: () => void
 }
@@ -12,11 +14,20 @@ export default function StepCaptureModal({
   isOpen,
   screenshotDataUrl,
   stepNumber,
+  initialTitle,
+  initialDescription,
   onConfirm,
   onCancel
 }: StepCaptureModalProps): JSX.Element | null {
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
+  const [title, setTitle] = useState(initialTitle ?? '')
+  const [description, setDescription] = useState(initialDescription ?? '')
+
+  useEffect(() => {
+    if (isOpen) {
+      setTitle(initialTitle ?? '')
+      setDescription(initialDescription ?? '')
+    }
+  }, [isOpen, initialTitle, initialDescription])
 
   if (!isOpen) return null
 

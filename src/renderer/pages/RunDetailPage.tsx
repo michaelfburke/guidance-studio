@@ -131,12 +131,18 @@ export default function RunDetailPage(): JSX.Element {
 
   // Include / exclude a step from the generated guidance.
   const handleToggleExclude = useCallback(async (index: number): Promise<void> => {
-    const updated = liveSteps.map(s =>
+    const isAgent = run?.meta.mode === 'agent'
+    const current = isAgent ? liveSteps : assistedSteps
+    const updated = current.map(s =>
       s.index === index ? { ...s, excluded: !s.excluded } : s
     )
-    setLiveSteps(updated)
+    if (isAgent) {
+      setLiveSteps(updated)
+    } else {
+      setAssistedSteps(updated)
+    }
     if (runId) await window.electronAPI.runSaveSteps(runId, updated)
-  }, [liveSteps, runId])
+  }, [liveSteps, assistedSteps, runId, run])
 
   const handleGenerateDocs = useCallback(async () => {
     if (!runId || !run) return
@@ -224,6 +230,20 @@ export default function RunDetailPage(): JSX.Element {
     setRun(prev => prev ? { ...prev, meta: updatedMeta } : null)
     setActiveTab('docs')
   }, [runId, run, assistedSteps])
+
+  const handleStepEdited = useCallback(async (step: RunStep) => {
+    const updated = assistedSteps.map(s => s.index === step.index ? step : s)
+    setAssistedSteps(updated)
+    if (runId) await window.electronAPI.runSaveSteps(runId, updated)
+  }, [assistedSteps, runId])
+
+  const handleContinueRecording = useCallback(async () => {
+    if (!runId || !run) return
+    const updatedMeta: RunMeta = { ...run.meta, status: 'running' }
+    await window.electronAPI.runSave(updatedMeta)
+    setRun(prev => prev ? { ...prev, meta: updatedMeta } : null)
+    setActiveTab('run')
+  }, [runId, run])
 
   if (loading) {
     return (
@@ -341,6 +361,19 @@ export default function RunDetailPage(): JSX.Element {
               disabled={assistedSteps.length === 0}
             >
               Finish Recording
+            </button>
+          )}
+
+          {meta.mode === 'assisted' && meta.status === 'completed' && (
+            <button
+              onClick={handleContinueRecording}
+              className="btn btn-secondary btn-sm"
+            >
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="6.5" cy="6.5" r="5" fillOpacity="0.3" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                <circle cx="6.5" cy="6.5" r="2.5" fill="currentColor" stroke="none" />
+              </svg>
+              Continue Recording
             </button>
           )}
 
@@ -479,6 +512,8 @@ export default function RunDetailPage(): JSX.Element {
                 steps={assistedSteps}
                 onStepAdded={handleStepAdded}
                 onStepRemoved={handleStepRemoved}
+                onStepEdited={handleStepEdited}
+                onStepToggleExclude={handleToggleExclude}
               />
             )}
           </>

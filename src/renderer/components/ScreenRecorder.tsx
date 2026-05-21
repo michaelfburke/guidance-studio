@@ -8,18 +8,24 @@ interface ScreenRecorderProps {
   steps: RunStep[]
   onStepAdded: (step: RunStep) => void
   onStepRemoved: (index: number) => void
+  onStepEdited: (step: RunStep) => void
+  onStepToggleExclude: (index: number) => void
 }
 
 export default function ScreenRecorder({
   runId,
   steps,
   onStepAdded,
-  onStepRemoved
+  onStepRemoved,
+  onStepEdited,
+  onStepToggleExclude
 }: ScreenRecorderProps): JSX.Element {
   const [isRecording, setIsRecording] = useState(false)
-  const [isPaused, setIsPaused] = useState(false)
   const [captureModalOpen, setCaptureModalOpen] = useState(false)
   const [capturedScreenshot, setCapturedScreenshot] = useState<string | null>(null)
+  const [capturedTranscript, setCapturedTranscript] = useState('')
+  const [editingStep, setEditingStep] = useState<RunStep | null>(null)
+  const [micEnabled, setMicEnabled] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedStep, setSelectedStep] = useState<number | null>(null)
 
@@ -29,6 +35,9 @@ export default function ScreenRecorder({
   const streamRef = useRef<MediaStream | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const recordingIndexRef = useRef(0)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null)
+  const transcriptBufferRef = useRef('')
 
   const startRecording = useCallback(async () => {
     setError(null)
@@ -57,11 +66,13 @@ export default function ScreenRecorder({
         const blob = new Blob(chunksRef.current, { type: 'video/webm' })
         chunksRef.current = []
 
-        // Save recording
         const arrayBuffer = await blob.arrayBuffer()
-        const base64 = btoa(
-          String.fromCharCode(...new Uint8Array(arrayBuffer))
-        )
+        const bytes = new Uint8Array(arrayBuffer)
+        let binary = ''
+        for (let i = 0; i < bytes.length; i += 8192) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + 8192))
+        }
+        const base64 = btoa(binary)
 
         try {
           await window.electronAPI.recordingSave({
@@ -79,10 +90,35 @@ export default function ScreenRecorder({
         stopRecording()
       })
 
-      recorder.start(1000) // collect data every second
+      recorder.start(1000)
       mediaRecorderRef.current = recorder
       setIsRecording(true)
-      setIsPaused(false)
+
+      // Start speech recognition if mic is enabled
+      if (micEnabled) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const SpeechRecognitionCtor = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition
+        if (SpeechRecognitionCtor) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const recognition = new SpeechRecognitionCtor() as any
+          recognition.continuous = true
+          recognition.interimResults = false
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          recognition.onresult = (event: any) => {
+            const result = event.results[event.resultIndex]
+            if (result.isFinal) {
+              const text = (result[0].transcript as string).trim()
+              if (text) {
+                transcriptBufferRef.current += (transcriptBufferRef.current ? ' ' : '') + text
+              }
+            }
+          }
+          recognition.onerror = () => { /* silently degrade */ }
+          recognition.start()
+          recognitionRef.current = recognition
+          transcriptBufferRef.current = ''
+        }
+      }
     } catch (err) {
       if (err instanceof Error && err.name === 'NotAllowedError') {
         setError('Screen sharing permission denied. Please allow screen capture to proceed.')
@@ -90,7 +126,7 @@ export default function ScreenRecorder({
         setError(`Failed to start recording: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
-  }, [runId])
+  }, [runId, micEnabled])
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -104,8 +140,11 @@ export default function ScreenRecorder({
       videoRef.current.srcObject = null
     }
     mediaRecorderRef.current = null
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch { /* ignore */ }
+      recognitionRef.current = null
+    }
     setIsRecording(false)
-    setIsPaused(false)
   }, [])
 
   const captureStep = useCallback(() => {
@@ -123,47 +162,55 @@ export default function ScreenRecorder({
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
     const dataUrl = canvas.toDataURL('image/png')
 
+    const transcript = transcriptBufferRef.current
+    transcriptBufferRef.current = ''
+
     setCapturedScreenshot(dataUrl)
+    setCapturedTranscript(transcript)
+    setEditingStep(null)
     setCaptureModalOpen(true)
   }, [])
 
   const handleStepConfirm = useCallback(async (title: string, description: string) => {
+    if (editingStep !== null) {
+      onStepEdited({ ...editingStep, title, description })
+      setCaptureModalOpen(false)
+      setEditingStep(null)
+      return
+    }
+
     const stepIndex = steps.length
     let screenshotPath: string | null = null
 
     if (capturedScreenshot) {
       try {
-        // Convert data URL to base64
         const base64 = capturedScreenshot.split(',')[1]
         const filename = `step-${String(stepIndex).padStart(3, '0')}.png`
-
-        const result = await window.electronAPI.assetSave({
-          runId,
-          filename,
-          data: base64
-        })
+        const result = await window.electronAPI.assetSave({ runId, filename, data: base64 })
         screenshotPath = result.filePath
       } catch (err) {
         console.error('Failed to save screenshot:', err)
       }
     }
 
-    const step: RunStep = {
-      index: stepIndex,
-      title,
-      description,
-      screenshotPath,
-      thumbnailPath: null
-    }
-
-    onStepAdded(step)
+    onStepAdded({ index: stepIndex, title, description, screenshotPath, thumbnailPath: null })
     setCaptureModalOpen(false)
     setCapturedScreenshot(null)
-  }, [steps.length, capturedScreenshot, runId, onStepAdded])
+    setCapturedTranscript('')
+  }, [editingStep, steps.length, capturedScreenshot, runId, onStepAdded, onStepEdited])
 
   const handleStepCancel = useCallback(() => {
     setCaptureModalOpen(false)
     setCapturedScreenshot(null)
+    setCapturedTranscript('')
+    setEditingStep(null)
+  }, [])
+
+  const handleEditStep = useCallback((step: RunStep) => {
+    setEditingStep(step)
+    setCapturedScreenshot(null)
+    setCapturedTranscript('')
+    setCaptureModalOpen(true)
   }, [])
 
   return (
@@ -210,16 +257,31 @@ export default function ScreenRecorder({
       {/* Controls */}
       <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2">
         {!isRecording ? (
-          <button
-            onClick={startRecording}
-            className="btn btn-primary btn-sm"
-          >
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="currentColor">
-              <circle cx="6.5" cy="6.5" r="5" fillOpacity="0.3" stroke="currentColor" strokeWidth="1.5" fill="none" />
-              <circle cx="6.5" cy="6.5" r="2.5" />
-            </svg>
-            Start Recording
-          </button>
+          <>
+            <button
+              onClick={startRecording}
+              className="btn btn-primary btn-sm"
+            >
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="currentColor">
+                <circle cx="6.5" cy="6.5" r="5" fillOpacity="0.3" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                <circle cx="6.5" cy="6.5" r="2.5" />
+              </svg>
+              Start Recording
+            </button>
+            <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none ml-1">
+              <input
+                type="checkbox"
+                checked={micEnabled}
+                onChange={(e) => setMicEnabled(e.target.checked)}
+                className="w-3 h-3 accent-brand-500"
+              />
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="4" y="1" width="4" height="6" rx="2" />
+                <path d="M2 6a4 4 0 008 0M6 10v1.5M4.5 11.5h3" />
+              </svg>
+              Transcribe voice
+            </label>
+          </>
         ) : (
           <>
             <button
@@ -290,6 +352,8 @@ export default function ScreenRecorder({
                 isSelected={selectedStep === step.index}
                 onClick={() => setSelectedStep(selectedStep === step.index ? null : step.index)}
                 onDelete={() => onStepRemoved(step.index)}
+                onEdit={() => handleEditStep(step)}
+                onToggleExclude={() => onStepToggleExclude(step.index)}
                 showDelete={true}
               />
             ))}
@@ -297,11 +361,19 @@ export default function ScreenRecorder({
         )}
       </div>
 
-      {/* Capture modal */}
+      {/* Capture / edit modal */}
       <StepCaptureModal
         isOpen={captureModalOpen}
-        screenshotDataUrl={capturedScreenshot}
-        stepNumber={steps.length + 1}
+        screenshotDataUrl={editingStep
+          ? (editingStep.screenshotPath
+              ? editingStep.screenshotPath.startsWith('gsasset://')
+                ? editingStep.screenshotPath
+                : `gsasset://asset${encodeURI(editingStep.screenshotPath.replace(/^file:\/\//, ''))}`
+              : null)
+          : capturedScreenshot}
+        stepNumber={editingStep ? editingStep.index + 1 : steps.length + 1}
+        initialTitle={editingStep?.title}
+        initialDescription={editingStep?.description}
         onConfirm={handleStepConfirm}
         onCancel={handleStepCancel}
       />
