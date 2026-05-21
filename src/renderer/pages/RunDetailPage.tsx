@@ -76,8 +76,12 @@ export default function RunDetailPage(): JSX.Element {
         // Reload to get final state
         setTimeout(() => loadRun(), 500)
       }
-      if (event.type === 'error') {
+      // Only a fatal error ends the run — transient action failures the agent
+      // recovers from must not hide the Stop button mid-run.
+      if (event.type === 'error' && event.fatal) {
         setIsRunning(false)
+        // Reload to pick up the persisted final status (failed/stopped).
+        setTimeout(() => loadRun(), 500)
       }
     })
 

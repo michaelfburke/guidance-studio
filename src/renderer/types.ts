@@ -3,6 +3,8 @@ export interface AgentEvent {
   type: 'nav' | 'observe' | 'click' | 'type' | 'screenshot' | 'analyze' | 'step' | 'complete' | 'error' | 'info'
   message: string
   timestamp: number
+  // True only when an 'error' event ends the run; non-fatal errors leave it false.
+  fatal?: boolean
 }
 
 export interface RunStep {

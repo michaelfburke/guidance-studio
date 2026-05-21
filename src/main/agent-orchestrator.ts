@@ -23,6 +23,9 @@ export interface AgentEvent {
   type: 'nav' | 'observe' | 'click' | 'type' | 'screenshot' | 'analyze' | 'step' | 'complete' | 'error' | 'info'
   message: string
   timestamp: number
+  // True only when an 'error' event ends the run. Non-fatal errors (e.g. a
+  // failed action the agent recovers from) leave this false.
+  fatal?: boolean
 }
 
 interface AgentAction {
@@ -47,8 +50,13 @@ const activeAgents = new Map<string, { stopped: boolean }>()
 // Per-run event logs, persisted so the activity log survives reloads.
 const runEventLogs = new Map<string, AgentEvent[]>()
 
-function emitEvent(runId: string, type: AgentEvent['type'], message: string): void {
-  const event: AgentEvent = { runId, type, message, timestamp: Date.now() }
+function emitEvent(
+  runId: string,
+  type: AgentEvent['type'],
+  message: string,
+  fatal = false
+): void {
+  const event: AgentEvent = { runId, type, message, timestamp: Date.now(), fatal }
   const log = runEventLogs.get(runId)
   if (log) {
     log.push(event)
@@ -131,7 +139,7 @@ export async function runAgent(params: {
         snap = await browser.snapshot()
       } catch (err) {
         failureReason = `Could not read the page: ${errMessage(err)}`
-        emitEvent(runId, 'error', failureReason)
+        emitEvent(runId, 'error', failureReason, true)
         break
       }
 
@@ -166,7 +174,7 @@ export async function runAgent(params: {
         )
       } catch (err) {
         failureReason = `LLM could not decide the next step: ${errMessage(err)}`
-        emitEvent(runId, 'error', failureReason)
+        emitEvent(runId, 'error', failureReason, true)
         break
       }
 
@@ -219,12 +227,13 @@ export async function runAgent(params: {
       emitEvent(
         runId,
         'error',
-        `Run ended early — captured ${steps.length} step(s) before the agent could not continue.`
+        `Run ended early — captured ${steps.length} step(s) before the agent could not continue.`,
+        true
       )
     }
     finalize(runId, steps, finalStatus)
   } catch (err) {
-    emitEvent(runId, 'error', `Agent error: ${errMessage(err)}`)
+    emitEvent(runId, 'error', `Agent error: ${errMessage(err)}`, true)
     finalize(runId, steps, 'failed')
   } finally {
     await browser.close()
