@@ -69,8 +69,9 @@ export class BrowserAgent {
   private context: BrowserContext | null = null
   private page: Page | null = null
 
-  async launch(): Promise<void> {
-    this.browser = await chromium.launch({ headless: false, slowMo: 150 })
+  async launch(options: { headless?: boolean } = {}): Promise<void> {
+    const headless = options.headless ?? false
+    this.browser = await chromium.launch({ headless, slowMo: headless ? 0 : 150 })
     this.context = await this.browser.newContext({
       viewport: { width: 1280, height: 800 }
     })

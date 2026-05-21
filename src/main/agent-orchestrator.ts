@@ -82,9 +82,11 @@ export async function runAgent(params: {
   goal: string
   llmProvider: LLMProvider
   credentials?: CredentialSecret | null
+  headless?: boolean
 }): Promise<void> {
   const { runId, url, productName, feature, goal, llmProvider } = params
   const credentials = params.credentials ?? null
+  const headless = params.headless ?? false
 
   activeAgents.set(runId, { stopped: false })
   runEventLogs.set(runId, [])
@@ -108,7 +110,7 @@ export async function runAgent(params: {
 
   try {
     emitEvent(runId, 'info', `Launching browser for: ${goal}`)
-    await browser.launch()
+    await browser.launch({ headless })
 
     if (isStopped(runId)) return
 
