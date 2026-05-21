@@ -85,6 +85,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   copilotDisconnect: () => ipcRenderer.invoke('auth:copilot-disconnect'),
   copilotClientConfigured: () => ipcRenderer.invoke('auth:copilot-client-configured'),
 
+  // GitHub Models catalog
+  githubModelsListModels: () => ipcRenderer.invoke('github-models:list-models'),
+
   // Utility
   openExternal: (url: string) => ipcRenderer.invoke('util:openExternal', url),
   getAppVersion: () => ipcRenderer.invoke('util:getAppVersion'),

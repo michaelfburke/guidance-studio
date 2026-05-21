@@ -481,6 +481,38 @@ export function registerIpcHandlers(): void {
     return { success: true }
   })
 
+  // ── GitHub Models catalog ──────────────────────────────────────────────────
+  ipcMain.handle('github-models:list-models', async () => {
+    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, 'github-models')
+    if (!apiKey) return { success: false, error: 'No PAT configured', models: [] }
+
+    let res: Response
+    try {
+      res = await fetch('https://models.github.ai/catalog/models', {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28'
+        }
+      })
+    } catch (err) {
+      return { success: false, error: `Network error: ${err instanceof Error ? err.message : String(err)}`, models: [] }
+    }
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      return { success: false, error: `API error ${res.status}: ${detail.slice(0, 200)}`, models: [] }
+    }
+
+    const data = (await res.json()) as Array<{ id: string; name: string; publisher: string; supported_input_modalities?: string[] }>
+    // Only return chat/text models (skip embedding-only models).
+    const models = data
+      .filter(m => !m.supported_input_modalities || m.supported_input_modalities.includes('text'))
+      .map(m => ({ id: m.id, name: m.name, publisher: m.publisher }))
+      .sort((a, b) => a.publisher.localeCompare(b.publisher) || a.name.localeCompare(b.name))
+    return { success: true, models }
+  })
+
   // ── Utilities ──────────────────────────────────────────────────────────────
   ipcMain.handle('util:openExternal', async (_event, url: string) => {
     await shell.openExternal(url)

@@ -106,6 +106,12 @@ export default function SettingsPage(): JSX.Element {
   const [showOpenAIKey, setShowOpenAIKey] = useState(false)
   const [showGithubModelsKey, setShowGithubModelsKey] = useState(false)
 
+  // GitHub Models catalog state
+  type GithubModel = { id: string; name: string; publisher: string }
+  const [githubModelsList, setGithubModelsList] = useState<GithubModel[]>([])
+  const [githubModelsLoading, setGithubModelsLoading] = useState(false)
+  const [githubModelsListError, setGithubModelsListError] = useState('')
+
   // OpenRouter OAuth state
   const [openrouterStatus, setOpenrouterStatus] = useState<OAuthStatus>('idle')
   const [openrouterError, setOpenrouterError] = useState('')
@@ -156,6 +162,10 @@ export default function SettingsPage(): JSX.Element {
         setCopilotClientConfigured(configured)
 
         setCredentials(await window.electronAPI.credentialsList())
+
+        if (githubModelsKey) {
+          fetchGithubModels()
+        }
       } catch (err) {
         console.error('Failed to load settings:', err)
       } finally {
@@ -163,6 +173,23 @@ export default function SettingsPage(): JSX.Element {
       }
     }
     load()
+  }, [])
+
+  const fetchGithubModels = useCallback(async (): Promise<void> => {
+    setGithubModelsLoading(true)
+    setGithubModelsListError('')
+    try {
+      const result = await window.electronAPI.githubModelsListModels()
+      if (result.success) {
+        setGithubModelsList(result.models)
+      } else {
+        setGithubModelsListError(result.error ?? 'Failed to load models')
+      }
+    } catch (err) {
+      setGithubModelsListError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setGithubModelsLoading(false)
+    }
   }, [])
 
   // Cleanup device flow poll on unmount
@@ -652,11 +679,32 @@ export default function SettingsPage(): JSX.Element {
                     </div>
                   </div>
                   <div>
-                    <label className="label">Model</label>
-                    <input type="text" value={settings.githubModelsModel}
-                      onChange={e => setSettings(prev => ({ ...prev, githubModelsModel: e.target.value }))}
-                      placeholder={DEFAULT_GITHUB_MODELS_MODEL} className="input font-mono text-xs" />
-                    <p className="text-xs text-slate-600 mt-1">Browse models at github.com/marketplace/models</p>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-sm font-medium text-slate-300">Model</span>
+                      {githubModelsLoading && <SpinnerIcon />}
+                    </div>
+                    {githubModelsList.length > 0 ? (
+                      <select
+                        value={settings.githubModelsModel}
+                        onChange={e => setSettings(prev => ({ ...prev, githubModelsModel: e.target.value }))}
+                        className="input font-mono text-xs">
+                        {githubModelsList.map(m => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} — {m.publisher}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input type="text" value={settings.githubModelsModel}
+                        onChange={e => setSettings(prev => ({ ...prev, githubModelsModel: e.target.value }))}
+                        placeholder={DEFAULT_GITHUB_MODELS_MODEL} className="input font-mono text-xs" />
+                    )}
+                    {githubModelsListError && (
+                      <p className="text-xs text-amber-400 mt-1">{githubModelsListError}</p>
+                    )}
+                    {!githubModelsListError && githubModelsList.length === 0 && !githubModelsLoading && (
+                      <p className="text-xs text-slate-600 mt-1">Save your PAT to load the model list</p>
+                    )}
                   </div>
                 </div>
 
@@ -666,7 +714,11 @@ export default function SettingsPage(): JSX.Element {
 
                 <div className="flex items-center gap-2 mt-3">
                   <button
-                    onClick={() => { saveField('githubModelsApiKey', settings.githubModelsApiKey); saveField('githubModelsModel', settings.githubModelsModel) }}
+                    onClick={async () => {
+                      await saveField('githubModelsApiKey', settings.githubModelsApiKey)
+                      await saveField('githubModelsModel', settings.githubModelsModel)
+                      if (settings.githubModelsApiKey) fetchGithubModels()
+                    }}
                     disabled={saving.has('githubModelsApiKey')} className="btn btn-secondary btn-sm">
                     {saving.has('githubModelsApiKey') ? 'Saving...' : 'Save'}
                   </button>

@@ -110,6 +110,9 @@ export interface ElectronAPI {
   recordingScreenAccess: () => Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>
   recordingOpenScreenSettings: () => Promise<{ success: boolean }>
 
+  // GitHub Models catalog
+  githubModelsListModels: () => Promise<{ success: boolean; error?: string; models: Array<{ id: string; name: string; publisher: string }> }>
+
   // Auth — OpenRouter
   openrouterConnect: () => Promise<{ success: boolean; error?: string }>
   openrouterDisconnect: () => Promise<{ success: boolean }>
