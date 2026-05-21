@@ -342,7 +342,7 @@ export default function RunDetailPage(): JSX.Element {
 
         {/* Actions */}
         <div className="flex items-center gap-2 shrink-0">
-          {isRunning && (
+          {isRunning && meta.mode === 'agent' && (
             <button
               onClick={handleStopAgent}
               className="btn btn-danger btn-sm"

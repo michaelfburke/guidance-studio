@@ -1,4 +1,4 @@
-import { ipcMain, shell, app } from 'electron'
+import { ipcMain, shell, app, systemPreferences } from 'electron'
 import path from 'path'
 import keytar from 'keytar'
 import fs from 'fs'
@@ -396,6 +396,22 @@ export function registerIpcHandlers(): void {
     const buf = Buffer.from(params.data, 'base64')
     const filePath = saveRecording(params.runId, params.index, buf)
     return { success: true, filePath }
+  })
+
+  // Screen-recording permission status (macOS gates getDisplayMedia behind it).
+  ipcMain.handle('recording:screen-access', () => {
+    if (process.platform !== 'darwin') return 'granted'
+    return systemPreferences.getMediaAccessStatus('screen')
+  })
+
+  // Open the macOS Screen Recording settings pane so the user can grant access.
+  ipcMain.handle('recording:open-screen-settings', async () => {
+    if (process.platform === 'darwin') {
+      await shell.openExternal(
+        'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
+      )
+    }
+    return { success: true }
   })
 
   // ── Auth — OpenRouter ──────────────────────────────────────────────────────

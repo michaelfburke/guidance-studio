@@ -71,6 +71,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Recordings
   recordingSave: (params: { runId: string; index: number; data: string }) =>
     ipcRenderer.invoke('recording:save', params),
+  recordingScreenAccess: () => ipcRenderer.invoke('recording:screen-access'),
+  recordingOpenScreenSettings: () => ipcRenderer.invoke('recording:open-screen-settings'),
 
   // OAuth — OpenRouter
   openrouterConnect: () => ipcRenderer.invoke('auth:openrouter-connect'),

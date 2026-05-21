@@ -27,6 +27,7 @@ export default function ScreenRecorder({
   const [editingStep, setEditingStep] = useState<RunStep | null>(null)
   const [micEnabled, setMicEnabled] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [permissionBlocked, setPermissionBlocked] = useState(false)
   const [selectedStep, setSelectedStep] = useState<number | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -41,7 +42,17 @@ export default function ScreenRecorder({
 
   const startRecording = useCallback(async () => {
     setError(null)
+    setPermissionBlocked(false)
     try {
+      // macOS blocks screen capture until the user grants permission. Check
+      // first so we can point them to System Settings instead of failing with
+      // an opaque "Failed to get sources" error.
+      const access = await window.electronAPI.recordingScreenAccess()
+      if (access !== 'granted') {
+        setPermissionBlocked(true)
+        return
+      }
+
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: { width: 1920, height: 1080 },
         audio: false
@@ -127,6 +138,10 @@ export default function ScreenRecorder({
       }
     }
   }, [runId, micEnabled])
+
+  const openScreenSettings = useCallback((): void => {
+    window.electronAPI.recordingOpenScreenSettings().catch(() => { /* ignore */ })
+  }, [])
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -327,6 +342,43 @@ export default function ScreenRecorder({
           >
             ×
           </button>
+        </div>
+      )}
+
+      {/* Screen-recording permission */}
+      {permissionBlocked && (
+        <div className="mx-4 mt-3 px-3.5 py-3 bg-amber-900/20 border border-amber-800/50 rounded-lg text-xs">
+          <div className="flex items-start gap-2.5">
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0 text-amber-400">
+              <path d="M7.5 1.5L1 13h13L7.5 1.5z" />
+              <path d="M7.5 6v3.5M7.5 11.3h.01" />
+            </svg>
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-amber-100 mb-1">Screen Recording permission required</div>
+              <p className="text-amber-300/90 leading-relaxed">
+                macOS blocks screen capture until you allow it. Open System Settings → Privacy &amp;
+                Security → Screen Recording, enable this app (shown as{' '}
+                <span className="font-medium text-amber-200">Electron</span> while running in
+                development), then return and retry. If it still fails, fully quit and relaunch the app.
+              </p>
+              <div className="flex items-center gap-2 mt-2.5">
+                <button type="button" onClick={openScreenSettings} className="btn btn-secondary btn-sm">
+                  Open System Settings
+                </button>
+                <button type="button" onClick={() => startRecording()} className="btn btn-ghost btn-sm">
+                  Retry
+                </button>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPermissionBlocked(false)}
+              className="text-amber-400 hover:text-amber-200 shrink-0"
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
         </div>
       )}
 

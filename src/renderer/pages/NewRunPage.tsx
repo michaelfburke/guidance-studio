@@ -80,6 +80,17 @@ export default function NewRunPage(): JSX.Element {
           products.push({ productName: run.productName, url: run.url, domain })
         }
         setRecentProducts(products)
+
+        // When exactly one product has been used before, pre-fill the form
+        // with it so the user needn't pick it from the dropdown.
+        if (products.length === 1 && !prefill) {
+          const only = products[0]
+          setForm(prev => ({
+            ...prev,
+            productName: prev.productName || only.productName,
+            url: prev.url || only.url
+          }))
+        }
       })
       .catch(console.error)
   }, [])
