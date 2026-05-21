@@ -54,12 +54,24 @@ function saveSettings(settings: Record<string, unknown>): void {
 
 /** Builds the LLM provider for a run, reading keys and config from storage. */
 async function buildProvider(provider: string): Promise<LLMProvider> {
-  if (provider === 'claude' || provider === 'gemini') {
-    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, provider)
+  const settings = loadSettings()
+
+  if (provider === 'claude') {
+    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, 'claude')
     if (!apiKey) {
-      throw new Error(`No API key found for provider: ${provider}. Please configure it in Settings.`)
+      throw new Error('No API key found for Claude. Please configure it in Settings.')
     }
-    return provider === 'claude' ? new ClaudeProvider(apiKey) : new GeminiProvider(apiKey)
+    const model = (settings.claudeModel as string) || undefined
+    return new ClaudeProvider(apiKey, model)
+  }
+
+  if (provider === 'gemini') {
+    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, 'gemini')
+    if (!apiKey) {
+      throw new Error('No API key found for Gemini. Please configure it in Settings.')
+    }
+    const model = (settings.geminiModel as string) || undefined
+    return new GeminiProvider(apiKey, model)
   }
 
   if (provider === 'openai') {

@@ -41,6 +41,8 @@ export interface AppSettings {
   claudeApiKeySet?: boolean
   geminiApiKeySet?: boolean
   openaiApiKeySet?: boolean
+  claudeModel?: string
+  geminiModel?: string
   openaiBaseUrl?: string
   openaiModel?: string
 }
