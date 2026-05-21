@@ -8,6 +8,14 @@ import keytar from 'keytar'
 const SERVICE = 'guidance-studio'
 const PREFIX = 'cred:'
 
+async function safeFind(service: string): Promise<Array<{ account: string; password: string }>> {
+  try {
+    return await keytar.findCredentials(service)
+  } catch {
+    return []
+  }
+}
+
 export interface StoredCredential {
   domain: string
   username: string
@@ -42,7 +50,7 @@ function parseSecret(raw: string): CredentialSecret | null {
 
 /** Lists stored credentials WITHOUT passwords — safe to send to the renderer. */
 export async function listCredentials(): Promise<StoredCredential[]> {
-  const all = await keytar.findCredentials(SERVICE)
+  const all = await safeFind(SERVICE)
   return all
     .filter(c => c.account.startsWith(PREFIX))
     .map(c => ({
@@ -76,7 +84,7 @@ export async function getCredentialForUrl(url: string): Promise<CredentialSecret
   }
   host = host.replace(/^www\./, '')
 
-  const all = await keytar.findCredentials(SERVICE)
+  const all = await safeFind(SERVICE)
   let best: { domain: string; secret: CredentialSecret } | null = null
   for (const c of all) {
     if (!c.account.startsWith(PREFIX)) continue
