@@ -20,6 +20,8 @@
       --brand-dim:#0284c7;
       --violet:   #a78bfa;
       --emerald:  #34d399;
+      --kofi:     #FF5E5B;
+      --kofi-dim: #e54542;
     }
 
     html { scroll-behavior: smooth; }
@@ -87,6 +89,19 @@
       transition: background 0.15s;
     }
     .btn-nav:hover { background: var(--brand-dim); }
+    .btn-nav-kofi {
+      background: var(--kofi);
+      color: #fff !important;
+      padding: 6px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.875rem;
+      transition: background 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-nav-kofi:hover { background: var(--kofi-dim); text-decoration: none; }
 
     /* ── Hero ── */
     .hero {
@@ -399,6 +414,14 @@
       font-size: 0.875rem;
     }
     footer a { color: var(--muted); }
+    .footer-kofi {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--kofi) !important;
+      font-weight: 500;
+    }
+    .footer-kofi:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -411,6 +434,10 @@
         <li><a href="#modes">How it works</a></li>
         <li><a href="#features">Features</a></li>
         <li><a href="#download">Download</a></li>
+        <li><a href="https://ko-fi.com/michael2873" target="_blank" rel="noopener" class="btn-nav-kofi">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.011 3.976-4.011 3.976s-.121.119-.31.023c-.076-.057-.108-.09-.108-.09-.443-.441-3.368-3.049-4.034-3.954-.709-.965-1.041-2.7-.091-3.71.951-1.01 3.005-1.086 4.363.407 0 0 1.565-1.782 3.468-.963 1.904.82 1.832 3.011.723 4.311zm6.173.478c-.928.116-1.682.028-1.682.028V7.284h1.77s1.971.551 1.971 2.638c0 1.913-.985 2.667-2.059 3.015z"/></svg>
+          Support
+        </a></li>
         <li><a href="https://github.com/michaelfburke/guidance-studio" class="btn-nav">GitHub</a></li>
       </ul>
     </div>
@@ -592,6 +619,11 @@
     <div class="container">
       <p>GuidanceStudio is open source and MIT licensed. &nbsp;·&nbsp;
         <a href="https://github.com/michaelfburke/guidance-studio">GitHub</a>
+        &nbsp;·&nbsp;
+        <a href="https://ko-fi.com/michael2873" target="_blank" rel="noopener" class="footer-kofi">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.011 3.976-4.011 3.976s-.121.119-.31.023c-.076-.057-.108-.09-.108-.09-.443-.441-3.368-3.049-4.034-3.954-.709-.965-1.041-2.7-.091-3.71.951-1.01 3.005-1.086 4.363.407 0 0 1.565-1.782 3.468-.963 1.904.82 1.832 3.011.723 4.311zm6.173.478c-.928.116-1.682.028-1.682.028V7.284h1.77s1.971.551 1.971 2.638c0 1.913-.985 2.667-2.059 3.015z"/></svg>
+          Support on Ko-fi
+        </a>
       </p>
     </div>
   </footer>
