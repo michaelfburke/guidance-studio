@@ -72,6 +72,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   recordingSave: (params: { runId: string; index: number; data: string }) =>
     ipcRenderer.invoke('recording:save', params),
 
+  // OAuth — OpenRouter
+  openrouterConnect: () => ipcRenderer.invoke('auth:openrouter-connect'),
+  openrouterDisconnect: () => ipcRenderer.invoke('auth:openrouter-disconnect'),
+
+  // OAuth — GitHub Copilot (device flow)
+  copilotStartDeviceFlow: () => ipcRenderer.invoke('auth:copilot-start'),
+  copilotPoll: (deviceCode: string, interval: number) =>
+    ipcRenderer.invoke('auth:copilot-poll', deviceCode, interval),
+  copilotDisconnect: () => ipcRenderer.invoke('auth:copilot-disconnect'),
+  copilotClientConfigured: () => ipcRenderer.invoke('auth:copilot-client-configured'),
+
   // Utility
   openExternal: (url: string) => ipcRenderer.invoke('util:openExternal', url),
   getAppVersion: () => ipcRenderer.invoke('util:getAppVersion')
@@ -97,7 +108,7 @@ export interface RunStep {
 export interface RunMeta {
   id: string
   mode: 'agent' | 'assisted'
-  provider: 'claude' | 'gemini' | 'openai'
+  provider: 'claude' | 'gemini' | 'openai' | 'openrouter' | 'copilot'
   productName: string
   feature: string
   goal: string

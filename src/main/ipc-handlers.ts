@@ -25,12 +25,17 @@ import {
 import { ClaudeProvider } from './llm/claude'
 import { GeminiProvider } from './llm/gemini'
 import { OpenAIProvider } from './llm/openai'
+import { CopilotProvider } from './llm/copilot'
 import { RetryingProvider } from './llm/retry'
 import { type LLMProvider } from './llm/provider'
 import { buildDocGenerationPrompt, SYSTEM_PROMPT } from './llm/agent-prompts'
+import { openrouterOAuth } from './auth/openrouter-oauth'
+import { startDeviceFlow, pollDeviceFlow, COPILOT_CLIENT_ID } from './auth/github-device-flow'
 
 const DEFAULT_OPENAI_BASE_URL = 'http://localhost:4141/v1'
 const DEFAULT_OPENAI_MODEL = 'gpt-4.1'
+const DEFAULT_OPENROUTER_MODEL = 'anthropic/claude-sonnet-4-5'
+const DEFAULT_COPILOT_MODEL = 'gpt-4o'
 
 const KEYTAR_SERVICE = 'guidance-studio'
 
@@ -81,6 +86,20 @@ async function buildProvider(provider: string): Promise<LLMProvider> {
     const baseURL = (settings.openaiBaseUrl as string) || DEFAULT_OPENAI_BASE_URL
     const model = (settings.openaiModel as string) || DEFAULT_OPENAI_MODEL
     return new OpenAIProvider({ apiKey, baseURL, model })
+  }
+
+  if (provider === 'openrouter') {
+    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, 'openrouter')
+    if (!apiKey) throw new Error('OpenRouter is not connected. Please authorise it in Settings.')
+    const model = (settings.openrouterModel as string) || DEFAULT_OPENROUTER_MODEL
+    return new OpenAIProvider({ apiKey, baseURL: 'https://openrouter.ai/api/v1', model })
+  }
+
+  if (provider === 'copilot') {
+    const githubToken = await keytar.getPassword(KEYTAR_SERVICE, 'copilot')
+    if (!githubToken) throw new Error('GitHub Copilot is not connected. Please authorise it in Settings.')
+    const model = (settings.copilotModel as string) || DEFAULT_COPILOT_MODEL
+    return new CopilotProvider(githubToken, model)
   }
 
   throw new Error(`Unknown provider: ${provider}`)
@@ -227,16 +246,21 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('settings:getAll', async () => {
     const settings = loadSettings()
-    // Mask API keys - just return whether they're set
-    const claudeKey = await keytar.getPassword(KEYTAR_SERVICE, 'claude')
-    const geminiKey = await keytar.getPassword(KEYTAR_SERVICE, 'gemini')
-    const openaiKey = await keytar.getPassword(KEYTAR_SERVICE, 'openai')
+    const [claudeKey, geminiKey, openaiKey, openrouterKey, copilotKey] = await Promise.all([
+      keytar.getPassword(KEYTAR_SERVICE, 'claude'),
+      keytar.getPassword(KEYTAR_SERVICE, 'gemini'),
+      keytar.getPassword(KEYTAR_SERVICE, 'openai'),
+      keytar.getPassword(KEYTAR_SERVICE, 'openrouter'),
+      keytar.getPassword(KEYTAR_SERVICE, 'copilot')
+    ])
 
     return {
       ...settings,
       claudeApiKeySet: !!claudeKey,
       geminiApiKeySet: !!geminiKey,
-      openaiApiKeySet: !!openaiKey
+      openaiApiKeySet: !!openaiKey,
+      openrouterConnected: !!openrouterKey,
+      copilotConnected: !!copilotKey
     }
   })
 
@@ -372,6 +396,51 @@ export function registerIpcHandlers(): void {
     const buf = Buffer.from(params.data, 'base64')
     const filePath = saveRecording(params.runId, params.index, buf)
     return { success: true, filePath }
+  })
+
+  // ── Auth — OpenRouter ──────────────────────────────────────────────────────
+  ipcMain.handle('auth:openrouter-connect', async () => {
+    try {
+      const key = await openrouterOAuth()
+      await keytar.setPassword(KEYTAR_SERVICE, 'openrouter', key)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('auth:openrouter-disconnect', async () => {
+    await keytar.deletePassword(KEYTAR_SERVICE, 'openrouter')
+    return { success: true }
+  })
+
+  // ── Auth — GitHub Copilot (Device Flow) ────────────────────────────────────
+  ipcMain.handle('auth:copilot-client-configured', () => {
+    return { configured: !!COPILOT_CLIENT_ID }
+  })
+
+  ipcMain.handle('auth:copilot-start', async () => {
+    try {
+      const challenge = await startDeviceFlow()
+      return { success: true, ...challenge }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('auth:copilot-poll', async (_event, deviceCode: string, interval: number) => {
+    try {
+      const token = await pollDeviceFlow(deviceCode, interval)
+      await keytar.setPassword(KEYTAR_SERVICE, 'copilot', token)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('auth:copilot-disconnect', async () => {
+    await keytar.deletePassword(KEYTAR_SERVICE, 'copilot')
+    return { success: true }
   })
 
   // ── Utilities ──────────────────────────────────────────────────────────────

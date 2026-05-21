@@ -33,15 +33,19 @@ Either way, the output is an editable, step-by-step guide with annotated screens
 
 ### LLM providers
 
-GuidanceStudio supports three providers — configure whichever you have access to:
+GuidanceStudio supports five providers. OpenRouter and GitHub Copilot use OAuth — no API key to copy.
 
-| Provider | Where to get a key |
+| Provider | Setup |
 |---|---|
-| Claude (Anthropic) | [console.anthropic.com](https://console.anthropic.com) |
-| Gemini (Google) | [aistudio.google.com](https://aistudio.google.com) |
-| OpenAI-compatible | Set a custom base URL in Settings — no key required for local endpoints |
+| **Claude** (Anthropic) | Paste an API key from [console.anthropic.com](https://console.anthropic.com) |
+| **Gemini** (Google) | Paste an API key from [aistudio.google.com](https://aistudio.google.com) |
+| **OpenRouter** | Click **Connect with OpenRouter** — a browser window opens, you authorise, done. Your existing OpenRouter credits are used. Access Claude, GPT, Gemini, and open-source models from one balance. |
+| **GitHub Copilot** | Click **Connect with GitHub** — a short code appears in the app. Visit the displayed URL on github.com, enter the code, and authorise. Your Copilot subscription is used directly; no proxy required. |
+| **OpenAI-compatible** | Set a custom base URL (e.g. a local Ollama instance). API key is optional. |
 
-API keys are stored securely in your OS keychain (macOS Keychain, Windows Credential Manager, or libsecret on Linux).
+All credentials are stored securely in your OS keychain (macOS Keychain, Windows Credential Manager, or libsecret on Linux) and never written to disk.
+
+> **GitHub Copilot note:** This feature requires the app to be built with a registered GitHub OAuth App client ID (`GITHUB_COPILOT_CLIENT_ID`). If you are building from source, [register an OAuth App](https://github.com/settings/developers) and set that environment variable before building.
 
 ### Login credentials for Agent mode
 
@@ -71,7 +75,10 @@ The packaged installer lands in `release/`.
 
 ```
 src/
-├── main/          # Electron main process (IPC, storage, LLM calls, browser automation)
+├── main/
+│   ├── auth/      # OAuth helpers (OpenRouter PKCE, GitHub Device Flow)
+│   ├── llm/       # LLM provider implementations and retry logic
+│   └── ...        # IPC handlers, storage, browser automation
 ├── preload/       # Context bridge between main and renderer
 └── renderer/      # React UI (pages, components)
 ```
