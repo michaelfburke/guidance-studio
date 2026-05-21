@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import type { RunMeta } from '../types'
 import { providerMeta } from '../providers'
 
@@ -69,7 +69,6 @@ function StatusBadge({ status }: { status: RunMeta['status'] }): JSX.Element {
 }
 
 export default function RunCard({ run, onDelete }: RunCardProps): JSX.Element {
-  const navigate = useNavigate()
   const [pendingDelete, setPendingDelete] = useState(false)
 
   const handleDeleteClick = (e: React.MouseEvent): void => {
@@ -88,9 +87,9 @@ export default function RunCard({ run, onDelete }: RunCardProps): JSX.Element {
   }
 
   return (
-    <div
-      className="card p-4 cursor-pointer hover:border-slate-700 hover:bg-slate-900/80 transition-all duration-150 group"
-      onClick={() => navigate(`/runs/${run.id}`)}
+    <Link
+      to={`/runs/${run.id}`}
+      className="card p-4 cursor-pointer hover:border-slate-700 hover:bg-slate-900/80 transition-all duration-150 group block"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
@@ -180,6 +179,6 @@ export default function RunCard({ run, onDelete }: RunCardProps): JSX.Element {
           )}
         </div>
       </div>
-    </div>
+    </Link>
   )
 }

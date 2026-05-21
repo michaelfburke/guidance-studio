@@ -215,7 +215,7 @@ export default function SettingsPage(): JSX.Element {
           next.delete(key)
           return next
         })
-      }, 2000)
+      }, 4000)
     } catch (err) {
       console.error(`Failed to save ${key}:`, err)
     } finally {

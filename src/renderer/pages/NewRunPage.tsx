@@ -54,7 +54,7 @@ export default function NewRunPage(): JSX.Element {
 
   const showError = useCallback((msg: string) => {
     setErrorBanner(msg)
-    setTimeout(() => setErrorBanner(null), 8000)
+    setTimeout(() => setErrorBanner(null), 30000)
   }, [])
 
   useEffect(() => {
@@ -121,7 +121,6 @@ export default function NewRunPage(): JSX.Element {
         setRequiresOverride(true)
         return
       }
-      overrideGrantedRef.current = false
     }
 
     setIsSubmitting(true)
@@ -139,6 +138,7 @@ export default function NewRunPage(): JSX.Element {
           provider
         })
         navigate(`/runs/${runId}`)
+        overrideGrantedRef.current = false
       } catch (err) {
         showError(`Failed to start agent: ${err instanceof Error ? err.message : String(err)}`)
         setIsSubmitting(false)
@@ -158,6 +158,7 @@ export default function NewRunPage(): JSX.Element {
           stepCount: 0
         })
         navigate(`/runs/${runId}`)
+        overrideGrantedRef.current = false
       } catch (err) {
         showError(`Failed to create run: ${err instanceof Error ? err.message : String(err)}`)
         setIsSubmitting(false)
@@ -285,6 +286,9 @@ export default function NewRunPage(): JSX.Element {
                       : 'You record your screen while manually capturing steps with screenshots.'
                     }
                   </p>
+                  {mode === 'assisted' && (
+                    <span className="text-xs text-amber-500 mt-1 block">In progress — some features may be incomplete</span>
+                  )}
                 </button>
               ))}
             </div>
