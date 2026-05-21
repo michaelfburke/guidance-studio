@@ -41,6 +41,14 @@ const DEFAULT_GITHUB_MODELS_MODEL = 'openai/gpt-4o'
 
 const KEYTAR_SERVICE = 'guidance-studio'
 
+async function safeGetPassword(service: string, account: string): Promise<string | null> {
+  try {
+    return await keytar.getPassword(service, account)
+  } catch {
+    return null
+  }
+}
+
 // Simple JSON settings file in userData
 function getSettingsPath(): string {
   return path.join(app.getPath('userData'), 'settings.json')
@@ -64,7 +72,7 @@ async function buildProvider(provider: string): Promise<LLMProvider> {
   const settings = loadSettings()
 
   if (provider === 'claude') {
-    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, 'claude')
+    const apiKey = await safeGetPassword(KEYTAR_SERVICE, 'claude')
     if (!apiKey) {
       throw new Error('No API key found for Claude. Please configure it in Settings.')
     }
@@ -73,7 +81,7 @@ async function buildProvider(provider: string): Promise<LLMProvider> {
   }
 
   if (provider === 'gemini') {
-    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, 'gemini')
+    const apiKey = await safeGetPassword(KEYTAR_SERVICE, 'gemini')
     if (!apiKey) {
       throw new Error('No API key found for Gemini. Please configure it in Settings.')
     }
@@ -83,7 +91,7 @@ async function buildProvider(provider: string): Promise<LLMProvider> {
 
   if (provider === 'openai') {
     // The API key is optional — a local Copilot proxy does not need one.
-    const apiKey = (await keytar.getPassword(KEYTAR_SERVICE, 'openai')) || ''
+    const apiKey = (await safeGetPassword(KEYTAR_SERVICE, 'openai')) || ''
     const settings = loadSettings()
     const baseURL = (settings.openaiBaseUrl as string) || DEFAULT_OPENAI_BASE_URL
     const model = (settings.openaiModel as string) || DEFAULT_OPENAI_MODEL
@@ -91,21 +99,21 @@ async function buildProvider(provider: string): Promise<LLMProvider> {
   }
 
   if (provider === 'openrouter') {
-    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, 'openrouter')
+    const apiKey = await safeGetPassword(KEYTAR_SERVICE, 'openrouter')
     if (!apiKey) throw new Error('OpenRouter is not connected. Please authorise it in Settings.')
     const model = (settings.openrouterModel as string) || DEFAULT_OPENROUTER_MODEL
     return new OpenAIProvider({ apiKey, baseURL: 'https://openrouter.ai/api/v1', model })
   }
 
   if (provider === 'copilot') {
-    const githubToken = await keytar.getPassword(KEYTAR_SERVICE, 'copilot')
+    const githubToken = await safeGetPassword(KEYTAR_SERVICE, 'copilot')
     if (!githubToken) throw new Error('GitHub Copilot is not connected. Please authorise it in Settings.')
     const model = (settings.copilotModel as string) || DEFAULT_COPILOT_MODEL
     return new CopilotProvider(githubToken, model)
   }
 
   if (provider === 'github-models') {
-    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, 'github-models')
+    const apiKey = await safeGetPassword(KEYTAR_SERVICE, 'github-models')
     if (!apiKey) throw new Error('No GitHub PAT found for GitHub Models. Please configure it in Settings.')
     const model = (settings.githubModelsModel as string) || DEFAULT_GITHUB_MODELS_MODEL
     return new OpenAIProvider({ apiKey, baseURL: GITHUB_MODELS_BASE_URL, model })
@@ -206,16 +214,16 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('settings:get', async (_event, key: string) => {
     // API keys come from keytar
     if (key === 'claudeApiKey') {
-      return keytar.getPassword(KEYTAR_SERVICE, 'claude')
+      return safeGetPassword(KEYTAR_SERVICE, 'claude')
     }
     if (key === 'geminiApiKey') {
-      return keytar.getPassword(KEYTAR_SERVICE, 'gemini')
+      return safeGetPassword(KEYTAR_SERVICE, 'gemini')
     }
     if (key === 'openaiApiKey') {
-      return keytar.getPassword(KEYTAR_SERVICE, 'openai')
+      return safeGetPassword(KEYTAR_SERVICE, 'openai')
     }
     if (key === 'githubModelsApiKey') {
-      return keytar.getPassword(KEYTAR_SERVICE, 'github-models')
+      return safeGetPassword(KEYTAR_SERVICE, 'github-models')
     }
 
     const settings = loadSettings()
@@ -270,12 +278,12 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('settings:getAll', async () => {
     const settings = loadSettings()
     const [claudeKey, geminiKey, openaiKey, openrouterKey, copilotKey, githubModelsKey] = await Promise.all([
-      keytar.getPassword(KEYTAR_SERVICE, 'claude'),
-      keytar.getPassword(KEYTAR_SERVICE, 'gemini'),
-      keytar.getPassword(KEYTAR_SERVICE, 'openai'),
-      keytar.getPassword(KEYTAR_SERVICE, 'openrouter'),
-      keytar.getPassword(KEYTAR_SERVICE, 'copilot'),
-      keytar.getPassword(KEYTAR_SERVICE, 'github-models')
+      safeGetPassword(KEYTAR_SERVICE, 'claude'),
+      safeGetPassword(KEYTAR_SERVICE, 'gemini'),
+      safeGetPassword(KEYTAR_SERVICE, 'openai'),
+      safeGetPassword(KEYTAR_SERVICE, 'openrouter'),
+      safeGetPassword(KEYTAR_SERVICE, 'copilot'),
+      safeGetPassword(KEYTAR_SERVICE, 'github-models')
     ])
 
     return {
@@ -486,7 +494,7 @@ export function registerIpcHandlers(): void {
 
   // ── GitHub Models catalog ──────────────────────────────────────────────────
   ipcMain.handle('github-models:list-models', async () => {
-    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, 'github-models')
+    const apiKey = await safeGetPassword(KEYTAR_SERVICE, 'github-models')
     if (!apiKey) return { success: false, error: 'No PAT configured', models: [] }
 
     let res: Response

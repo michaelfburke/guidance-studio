@@ -34,7 +34,7 @@ export default function RunDetailPage(): JSX.Element {
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
   const showError = useCallback((msg: string) => {
     setErrorBanner(msg)
-    setTimeout(() => setErrorBanner(null), 8000)
+    setTimeout(() => setErrorBanner(null), 30000)
   }, [])
 
   const unsubEventRef = useRef<(() => void) | null>(null)
