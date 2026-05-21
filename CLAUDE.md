@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 GuidanceStudio is an AI-powered documentation generation tool—a cross-platform Electron desktop application that automatically creates step-by-step user guides. It operates in two modes:
 
 - **Agent mode**: An autonomous browser agent navigates a web app, captures screenshots, and drafts documentation
-- **Assisted mode**: Manual navigation where users capture key steps and AI writes descriptions
+- **Assisted mode**: Manual navigation where users capture key steps and AI writes descriptions (**incomplete — not production ready**)
 
 The app is built with Electron, React, TypeScript, and supports five LLM providers (Claude, Gemini, OpenAI-compatible, OpenRouter, GitHub Copilot).
 
