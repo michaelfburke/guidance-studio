@@ -50,11 +50,15 @@ function SettingsIcon({ className }: { className?: string }): JSX.Element {
 export default function Layout(): JSX.Element {
   const navigate = useNavigate()
   const location = useLocation()
+  const isMac = window.electronAPI.platform === 'darwin'
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950">
       {/* Sidebar */}
       <aside className="w-56 flex-shrink-0 flex flex-col bg-slate-950 border-r border-slate-800/60">
+        {/* macOS: reserve space for the inset traffic-light buttons */}
+        {isMac && <div className="h-7 flex-shrink-0 draggable" />}
+
         {/* Logo area */}
         <div className="flex items-center gap-3 px-4 py-4 border-b border-slate-800/60 draggable">
           <GsLogo />

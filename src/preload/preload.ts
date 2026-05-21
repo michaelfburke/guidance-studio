@@ -85,7 +85,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Utility
   openExternal: (url: string) => ipcRenderer.invoke('util:openExternal', url),
-  getAppVersion: () => ipcRenderer.invoke('util:getAppVersion')
+  getAppVersion: () => ipcRenderer.invoke('util:getAppVersion'),
+
+  // Host platform ('darwin' | 'win32' | 'linux'); used for titlebar layout
+  platform: process.platform
 })
 
 // Type declarations for use in renderer

@@ -105,6 +105,9 @@ export interface ElectronAPI {
   // Utility
   openExternal: (url: string) => Promise<{ success: boolean }>
   getAppVersion: () => Promise<string>
+
+  // Host platform ('darwin' | 'win32' | 'linux')
+  platform: string
 }
 
 declare global {
