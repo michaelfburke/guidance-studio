@@ -36,6 +36,8 @@ const DEFAULT_OPENAI_BASE_URL = 'http://localhost:4141/v1'
 const DEFAULT_OPENAI_MODEL = 'gpt-4.1'
 const DEFAULT_OPENROUTER_MODEL = 'anthropic/claude-sonnet-4-5'
 const DEFAULT_COPILOT_MODEL = 'gpt-4o'
+const GITHUB_MODELS_BASE_URL = 'https://models.github.ai/inference'
+const DEFAULT_GITHUB_MODELS_MODEL = 'openai/gpt-4o'
 
 const KEYTAR_SERVICE = 'guidance-studio'
 
@@ -100,6 +102,13 @@ async function buildProvider(provider: string): Promise<LLMProvider> {
     if (!githubToken) throw new Error('GitHub Copilot is not connected. Please authorise it in Settings.')
     const model = (settings.copilotModel as string) || DEFAULT_COPILOT_MODEL
     return new CopilotProvider(githubToken, model)
+  }
+
+  if (provider === 'github-models') {
+    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, 'github-models')
+    if (!apiKey) throw new Error('No GitHub PAT found for GitHub Models. Please configure it in Settings.')
+    const model = (settings.githubModelsModel as string) || DEFAULT_GITHUB_MODELS_MODEL
+    return new OpenAIProvider({ apiKey, baseURL: GITHUB_MODELS_BASE_URL, model })
   }
 
   throw new Error(`Unknown provider: ${provider}`)
@@ -205,6 +214,9 @@ export function registerIpcHandlers(): void {
     if (key === 'openaiApiKey') {
       return keytar.getPassword(KEYTAR_SERVICE, 'openai')
     }
+    if (key === 'githubModelsApiKey') {
+      return keytar.getPassword(KEYTAR_SERVICE, 'github-models')
+    }
 
     const settings = loadSettings()
     return settings[key] ?? null
@@ -236,6 +248,14 @@ export function registerIpcHandlers(): void {
       }
       return { success: true }
     }
+    if (key === 'githubModelsApiKey') {
+      if (value && typeof value === 'string') {
+        await keytar.setPassword(KEYTAR_SERVICE, 'github-models', value)
+      } else {
+        await keytar.deletePassword(KEYTAR_SERVICE, 'github-models')
+      }
+      return { success: true }
+    }
 
     const settings = loadSettings()
     if (value === null || value === undefined) {
@@ -249,12 +269,13 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('settings:getAll', async () => {
     const settings = loadSettings()
-    const [claudeKey, geminiKey, openaiKey, openrouterKey, copilotKey] = await Promise.all([
+    const [claudeKey, geminiKey, openaiKey, openrouterKey, copilotKey, githubModelsKey] = await Promise.all([
       keytar.getPassword(KEYTAR_SERVICE, 'claude'),
       keytar.getPassword(KEYTAR_SERVICE, 'gemini'),
       keytar.getPassword(KEYTAR_SERVICE, 'openai'),
       keytar.getPassword(KEYTAR_SERVICE, 'openrouter'),
-      keytar.getPassword(KEYTAR_SERVICE, 'copilot')
+      keytar.getPassword(KEYTAR_SERVICE, 'copilot'),
+      keytar.getPassword(KEYTAR_SERVICE, 'github-models')
     ])
 
     return {
@@ -263,7 +284,8 @@ export function registerIpcHandlers(): void {
       geminiApiKeySet: !!geminiKey,
       openaiApiKeySet: !!openaiKey,
       openrouterConnected: !!openrouterKey,
-      copilotConnected: !!copilotKey
+      copilotConnected: !!copilotKey,
+      githubModelsApiKeySet: !!githubModelsKey
     }
   })
 
@@ -460,6 +482,38 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('auth:copilot-disconnect', async () => {
     await keytar.deletePassword(KEYTAR_SERVICE, 'copilot')
     return { success: true }
+  })
+
+  // ── GitHub Models catalog ──────────────────────────────────────────────────
+  ipcMain.handle('github-models:list-models', async () => {
+    const apiKey = await keytar.getPassword(KEYTAR_SERVICE, 'github-models')
+    if (!apiKey) return { success: false, error: 'No PAT configured', models: [] }
+
+    let res: Response
+    try {
+      res = await fetch('https://models.github.ai/catalog/models', {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2026-03-10'
+        }
+      })
+    } catch (err) {
+      return { success: false, error: `Network error: ${err instanceof Error ? err.message : String(err)}`, models: [] }
+    }
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      return { success: false, error: `API error ${res.status}: ${detail.slice(0, 200)}`, models: [] }
+    }
+
+    const data = (await res.json()) as Array<{ id: string; name: string; publisher: string; supported_input_modalities?: string[] }>
+    // Only return chat/text models (skip embedding-only models).
+    const models = data
+      .filter(m => !m.supported_input_modalities || m.supported_input_modalities.includes('text'))
+      .map(m => ({ id: m.id, name: m.name, publisher: m.publisher }))
+      .sort((a, b) => a.publisher.localeCompare(b.publisher) || a.name.localeCompare(b.name))
+    return { success: true, models }
   })
 
   // ── Utilities ──────────────────────────────────────────────────────────────

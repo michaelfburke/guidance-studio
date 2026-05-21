@@ -1,4 +1,4 @@
-export type ProviderId = 'claude' | 'gemini' | 'openai' | 'openrouter' | 'copilot'
+export type ProviderId = 'claude' | 'gemini' | 'openai' | 'openrouter' | 'copilot' | 'github-models'
 
 export interface ProviderMeta {
   id: ProviderId
@@ -53,6 +53,14 @@ export const PROVIDERS: ProviderMeta[] = [
     badgeClass: 'badge-copilot',
     accentBorder: 'border-sky-600/70 bg-sky-900/10',
     accentText: 'text-sky-400'
+  },
+  {
+    id: 'github-models',
+    label: 'GitHub Models',
+    vendor: 'by GitHub',
+    badgeClass: 'badge-github-models',
+    accentBorder: 'border-green-600/70 bg-green-900/10',
+    accentText: 'text-green-400'
   }
 ]
 

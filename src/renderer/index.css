@@ -111,6 +111,10 @@
     @apply badge bg-sky-900/60 text-sky-300 border border-sky-800/60;
   }
 
+  .badge-github-models {
+    @apply badge bg-green-900/60 text-green-300 border border-green-800/60;
+  }
+
   .status-running {
     @apply badge bg-amber-900/60 text-amber-300 border border-amber-800/60;
   }

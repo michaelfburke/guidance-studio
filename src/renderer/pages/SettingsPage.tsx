@@ -7,6 +7,7 @@ const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6'
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
 const DEFAULT_OPENROUTER_MODEL = 'anthropic/claude-sonnet-4-5'
 const DEFAULT_COPILOT_MODEL = 'gpt-4o'
+const DEFAULT_GITHUB_MODELS_MODEL = 'openai/gpt-4o'
 
 interface SettingsState {
   claudeApiKey: string
@@ -20,6 +21,8 @@ interface SettingsState {
   openrouterModel: string
   copilotConnected: boolean
   copilotModel: string
+  githubModelsApiKey: string
+  githubModelsModel: string
   defaultProvider: ProviderId
   headlessBrowser: boolean
   toneGuide: string
@@ -29,6 +32,7 @@ interface SettingsState {
 type TestStatus = 'idle' | 'testing' | 'ok' | 'fail'
 type TestState = Record<ProviderId, TestStatus>
 type TestError = Partial<Record<ProviderId, string>>
+
 
 type OAuthStatus = 'idle' | 'connecting' | 'ok' | 'fail'
 type DeviceFlowStatus = 'idle' | 'waiting' | 'polling' | 'ok' | 'fail'
@@ -83,6 +87,8 @@ export default function SettingsPage(): JSX.Element {
     openrouterModel: DEFAULT_OPENROUTER_MODEL,
     copilotConnected: false,
     copilotModel: DEFAULT_COPILOT_MODEL,
+    githubModelsApiKey: '',
+    githubModelsModel: DEFAULT_GITHUB_MODELS_MODEL,
     defaultProvider: 'claude',
     headlessBrowser: false,
     toneGuide: '',
@@ -90,7 +96,7 @@ export default function SettingsPage(): JSX.Element {
   })
 
   const [testState, setTestState] = useState<TestState>({
-    claude: 'idle', gemini: 'idle', openai: 'idle', openrouter: 'idle', copilot: 'idle'
+    claude: 'idle', gemini: 'idle', openai: 'idle', openrouter: 'idle', copilot: 'idle', 'github-models': 'idle'
   })
   const [testErrors, setTestErrors] = useState<TestError>({})
   const [savedFields, setSavedFields] = useState<Set<string>>(new Set())
@@ -100,6 +106,13 @@ export default function SettingsPage(): JSX.Element {
   const [showClaudeKey, setShowClaudeKey] = useState(false)
   const [showGeminiKey, setShowGeminiKey] = useState(false)
   const [showOpenAIKey, setShowOpenAIKey] = useState(false)
+  const [showGithubModelsKey, setShowGithubModelsKey] = useState(false)
+
+  // GitHub Models catalog state
+  type GithubModel = { id: string; name: string; publisher: string }
+  const [githubModelsList, setGithubModelsList] = useState<GithubModel[]>([])
+  const [githubModelsLoading, setGithubModelsLoading] = useState(false)
+  const [githubModelsListError, setGithubModelsListError] = useState('')
 
   // OpenRouter OAuth state
   const [openrouterStatus, setOpenrouterStatus] = useState<OAuthStatus>('idle')
@@ -126,6 +139,7 @@ export default function SettingsPage(): JSX.Element {
         const claudeKey = await window.electronAPI.settingsGet('claudeApiKey') as string | null
         const geminiKey = await window.electronAPI.settingsGet('geminiApiKey') as string | null
         const openaiKey = await window.electronAPI.settingsGet('openaiApiKey') as string | null
+        const githubModelsKey = await window.electronAPI.settingsGet('githubModelsApiKey') as string | null
 
         setSettings({
           claudeApiKey: claudeKey || '',
@@ -139,6 +153,8 @@ export default function SettingsPage(): JSX.Element {
           openrouterModel: (all.openrouterModel as string) || DEFAULT_OPENROUTER_MODEL,
           copilotConnected: !!(all.copilotConnected),
           copilotModel: (all.copilotModel as string) || DEFAULT_COPILOT_MODEL,
+          githubModelsApiKey: githubModelsKey || '',
+          githubModelsModel: (all.githubModelsModel as string) || DEFAULT_GITHUB_MODELS_MODEL,
           defaultProvider: (all.defaultProvider as ProviderId) || 'claude',
           headlessBrowser: !!(all.headlessBrowser),
           toneGuide: (all.toneGuide as string) || '',
@@ -149,6 +165,10 @@ export default function SettingsPage(): JSX.Element {
         setCopilotClientConfigured(configured)
 
         setCredentials(await window.electronAPI.credentialsList())
+
+        if (githubModelsKey) {
+          fetchGithubModels()
+        }
       } catch (err) {
         console.error('Failed to load settings:', err)
       } finally {
@@ -156,6 +176,23 @@ export default function SettingsPage(): JSX.Element {
       }
     }
     load()
+  }, [])
+
+  const fetchGithubModels = useCallback(async (): Promise<void> => {
+    setGithubModelsLoading(true)
+    setGithubModelsListError('')
+    try {
+      const result = await window.electronAPI.githubModelsListModels()
+      if (result.success) {
+        setGithubModelsList(result.models)
+      } else {
+        setGithubModelsListError(result.error ?? 'Failed to load models')
+      }
+    } catch (err) {
+      setGithubModelsListError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setGithubModelsLoading(false)
+    }
   }, [])
 
   // Cleanup device flow poll on unmount
@@ -611,6 +648,89 @@ export default function SettingsPage(): JSX.Element {
                 </div>
               </div>
 
+              {/* GitHub Models */}
+              <div className="p-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="badge-github-models">GitHub Models</span>
+                  <span className="text-xs text-slate-500">GitHub</span>
+                </div>
+                <p className="text-xs text-slate-500 mb-3">
+                  Access GPT-4o, Llama, DeepSeek, and more for free via your GitHub account.
+                  Requires a <strong className="text-slate-400">fine-grained</strong> personal access token (not classic) with the{' '}
+                  <span className="font-mono">Models: Read</span> permission — create one at{' '}
+                  <button
+                    onClick={() => window.electronAPI.openExternal('https://github.com/settings/personal-access-tokens/new')}
+                    className="text-green-400 hover:text-green-300 underline underline-offset-2">
+                    github.com/settings/personal-access-tokens/new
+                  </button>.
+                </p>
+
+                <div className="space-y-2">
+                  <div>
+                    <label className="label">Personal Access Token</label>
+                    <div className="relative">
+                      <input
+                        type={showGithubModelsKey ? 'text' : 'password'}
+                        value={settings.githubModelsApiKey}
+                        onChange={e => setSettings(prev => ({ ...prev, githubModelsApiKey: e.target.value }))}
+                        placeholder="github_pat_..."
+                        className="input pr-10"
+                      />
+                      <button type="button" onClick={() => setShowGithubModelsKey(!showGithubModelsKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                        {showGithubModelsKey ? <EyeOffIcon /> : <EyeIcon />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-sm font-medium text-slate-300">Model</span>
+                      {githubModelsLoading && <SpinnerIcon />}
+                    </div>
+                    {githubModelsList.length > 0 ? (
+                      <select
+                        value={settings.githubModelsModel}
+                        onChange={e => setSettings(prev => ({ ...prev, githubModelsModel: e.target.value }))}
+                        className="input font-mono text-xs">
+                        {githubModelsList.map(m => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} — {m.publisher}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input type="text" value={settings.githubModelsModel}
+                        onChange={e => setSettings(prev => ({ ...prev, githubModelsModel: e.target.value }))}
+                        placeholder={DEFAULT_GITHUB_MODELS_MODEL} className="input font-mono text-xs" />
+                    )}
+                    {githubModelsListError && (
+                      <p className="text-xs text-amber-400 mt-1">{githubModelsListError}</p>
+                    )}
+                    {!githubModelsListError && githubModelsList.length === 0 && !githubModelsLoading && (
+                      <p className="text-xs text-slate-600 mt-1">Save your PAT to load the model list</p>
+                    )}
+                  </div>
+                </div>
+
+                {testState['github-models'] === 'fail' && testErrors['github-models'] && (
+                  <p className="text-xs text-red-400 mt-2">{testErrors['github-models']}</p>
+                )}
+
+                <div className="flex items-center gap-2 mt-3">
+                  <button
+                    onClick={async () => {
+                      await saveField('githubModelsApiKey', settings.githubModelsApiKey)
+                      await saveField('githubModelsModel', settings.githubModelsModel)
+                      if (settings.githubModelsApiKey) fetchGithubModels()
+                    }}
+                    disabled={saving.has('githubModelsApiKey')} className="btn btn-secondary btn-sm">
+                    {saving.has('githubModelsApiKey') ? 'Saving...' : 'Save'}
+                  </button>
+                  <TestButton provider="github-models" disabled={!settings.githubModelsApiKey} />
+                  <FieldSavedBadge field="githubModelsApiKey" />
+                </div>
+              </div>
+
               {/* OpenAI-compatible */}
               <div className="p-5">
                 <div className="flex items-center gap-2 mb-1">
@@ -853,6 +973,10 @@ export default function SettingsPage(): JSX.Element {
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Copilot model</span>
                 <span className="text-slate-300 font-mono text-xs">{settings.copilotModel || DEFAULT_COPILOT_MODEL}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">GitHub Models model</span>
+                <span className="text-slate-300 font-mono text-xs">{settings.githubModelsModel || DEFAULT_GITHUB_MODELS_MODEL}</span>
               </div>
               <div className="border-t border-slate-800 pt-2 mt-2">
                 <div className="flex justify-between text-sm">
