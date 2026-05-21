@@ -9,7 +9,7 @@ GuidanceStudio is an AI-powered documentation generation tool—a cross-platform
 - **Agent mode**: An autonomous browser agent navigates a web app, captures screenshots, and drafts documentation
 - **Assisted mode**: Manual navigation where users capture key steps and AI writes descriptions
 
-The app is built with Electron, React, TypeScript, and supports three LLM providers (Claude, Gemini, OpenAI-compatible).
+The app is built with Electron, React, TypeScript, and supports five LLM providers (Claude, Gemini, OpenAI-compatible, OpenRouter, GitHub Copilot).
 
 ## Tech Stack
 
@@ -33,7 +33,9 @@ The app is built with Electron, React, TypeScript, and supports three LLM provid
 **LLM Integration:**
 - @anthropic-ai/sdk for Claude (default: claude-sonnet-4-6)
 - @google/generative-ai for Gemini (default: gemini-2.5-flash)
-- Generic OpenAI-compatible client for local endpoints (e.g., GitHub Copilot proxy, Ollama)
+- Generic OpenAI-compatible client for local endpoints (e.g., Ollama)
+- OpenRouter: OAuth PKCE flow via temporary localhost callback server; yields a user-scoped API key stored in keychain
+- GitHub Copilot: Device Flow (RFC 8628); requires `GITHUB_COPILOT_CLIENT_ID` env var at build time; `CopilotProvider` exchanges the GitHub OAuth token for short-lived (~30 min) Copilot session tokens, refreshing transparently
 - Base64 image encoding for all providers
 - Image compression to JPEG before sending to LLMs (max 1000px width, 55% quality)
 
@@ -51,6 +53,9 @@ src/
 │   ├── main.ts         # App initialization, window setup, protocol handlers
 │   ├── ipc-handlers.ts # IPC endpoints exposed to renderer
 │   ├── agent-orchestrator.ts  # Agent loop & state management
+│   ├── auth/
+│   │   ├── openrouter-oauth.ts    # PKCE OAuth flow for OpenRouter
+│   │   └── github-device-flow.ts  # RFC 8628 Device Flow for GitHub Copilot
 │   ├── browser/
 │   │   └── browser-agent.ts   # Playwright-based browser control
 │   ├── llm/
@@ -58,6 +63,7 @@ src/
 │   │   ├── claude.ts          # Claude implementation
 │   │   ├── gemini.ts          # Gemini implementation
 │   │   ├── openai.ts          # OpenAI-compatible implementation
+│   │   ├── copilot.ts         # GitHub Copilot implementation (session-token cache)
 │   │   ├── retry.ts           # Exponential backoff wrapper
 │   │   └── agent-prompts.ts   # System prompts & action schema
 │   ├── storage.ts      # Run metadata/steps/events persistence
@@ -115,7 +121,7 @@ src/
 ### Key Patterns & Conventions
 
 **LLM Provider Pattern:**
-All LLM classes (ClaudeProvider, GeminiProvider, OpenAIProvider) implement the `LLMProvider` interface:
+All LLM classes (ClaudeProvider, GeminiProvider, OpenAIProvider, CopilotProvider, and the OpenRouter variant of OpenAIProvider) implement the `LLMProvider` interface:
 ```typescript
 call(options: LLMCallOptions): Promise<string>
 ```
@@ -179,7 +185,7 @@ npm run preview               # Preview the built app without packaging
 Currently no automated test suite. Manual verification should cover:
 - Agent mode: Navigate a public web app (e.g., a demo site), verify screenshots are captured and steps recorded correctly
 - Assisted mode: Manually capture steps, verify annotation and markdown generation
-- LLM provider switching: Test each provider (Claude, Gemini, OpenAI) with API key configuration
+- LLM provider switching: Test each provider (Claude, Gemini, OpenAI, OpenRouter, GitHub Copilot) with appropriate auth configuration
 - Credential storage: Save and retrieve login credentials; verify placeholder substitution in agent navigation
 - Cross-platform: Build and test on Windows, macOS, Linux if making platform-specific changes
 
@@ -209,6 +215,7 @@ Currently no automated test suite. Manual verification should cover:
 - **Image Optimization**: Large screenshots are critical to LLM performance; JPEG compression (1000px, 55% quality) balances fidelity and request size
 - **Secure Context**: API keys never logged or sent to renderer; only presence flags (claudeApiKeySet, etc.) exposed to UI
 - **Cross-platform Keychain**: keytar abstracts Windows Credential Manager, macOS Keychain, and libsecret (Linux)
+- **Copilot Build Requirement**: `GITHUB_COPILOT_CLIENT_ID` must be set at build time (baked into the bundle via electron-vite); without it the GitHub Copilot provider throws on first use. Register a GitHub OAuth App with `read:user` scope to obtain the client ID.
 
 ## Release Process
 
