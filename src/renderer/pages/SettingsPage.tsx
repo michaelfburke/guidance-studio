@@ -7,7 +7,7 @@ const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6'
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
 const DEFAULT_OPENROUTER_MODEL = 'anthropic/claude-sonnet-4-5'
 const DEFAULT_COPILOT_MODEL = 'gpt-4o'
-const DEFAULT_GITHUB_MODELS_MODEL = 'gpt-4o'
+const DEFAULT_GITHUB_MODELS_MODEL = 'openai/gpt-4o'
 
 interface SettingsState {
   claudeApiKey: string
@@ -653,11 +653,12 @@ export default function SettingsPage(): JSX.Element {
                 </div>
                 <p className="text-xs text-slate-500 mb-3">
                   Access GPT-4o, Llama, DeepSeek, and more for free via your GitHub account.
-                  Create a personal access token with <span className="font-mono">models:read</span> scope at{' '}
+                  Requires a <strong className="text-slate-400">fine-grained</strong> personal access token (not classic) with the{' '}
+                  <span className="font-mono">Models: Read</span> permission — create one at{' '}
                   <button
-                    onClick={() => window.electronAPI.openExternal('https://github.com/settings/tokens')}
+                    onClick={() => window.electronAPI.openExternal('https://github.com/settings/personal-access-tokens/new')}
                     className="text-green-400 hover:text-green-300 underline underline-offset-2">
-                    github.com/settings/tokens
+                    github.com/settings/personal-access-tokens/new
                   </button>.
                 </p>
 

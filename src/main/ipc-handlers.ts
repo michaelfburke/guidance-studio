@@ -36,8 +36,8 @@ const DEFAULT_OPENAI_BASE_URL = 'http://localhost:4141/v1'
 const DEFAULT_OPENAI_MODEL = 'gpt-4.1'
 const DEFAULT_OPENROUTER_MODEL = 'anthropic/claude-sonnet-4-5'
 const DEFAULT_COPILOT_MODEL = 'gpt-4o'
-const GITHUB_MODELS_BASE_URL = 'https://models.inference.ai.azure.com'
-const DEFAULT_GITHUB_MODELS_MODEL = 'gpt-4o'
+const GITHUB_MODELS_BASE_URL = 'https://models.github.ai/inference'
+const DEFAULT_GITHUB_MODELS_MODEL = 'openai/gpt-4o'
 
 const KEYTAR_SERVICE = 'guidance-studio'
 
@@ -492,7 +492,7 @@ export function registerIpcHandlers(): void {
         headers: {
           Authorization: `Bearer ${apiKey}`,
           Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28'
+          'X-GitHub-Api-Version': '2026-03-10'
         }
       })
     } catch (err) {
