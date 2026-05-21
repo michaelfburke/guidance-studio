@@ -120,7 +120,6 @@ export default function RunDetailPage(): JSX.Element {
       state: {
         prefill: {
           mode: run.meta.mode,
-          provider: run.meta.provider,
           productName: run.meta.productName,
           url: run.meta.url ?? '',
           feature: run.meta.feature,

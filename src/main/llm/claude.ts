@@ -2,12 +2,16 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { LLMProvider, LLMCallOptions } from './provider'
 import { imageMimeType } from '../asset-manager'
 
+const DEFAULT_MODEL = 'claude-sonnet-4-6'
+
 export class ClaudeProvider implements LLMProvider {
   name = 'claude'
   private client: Anthropic
+  private model: string
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, model = DEFAULT_MODEL) {
     this.client = new Anthropic({ apiKey })
+    this.model = model
   }
 
   async call(options: LLMCallOptions): Promise<string> {
@@ -34,7 +38,7 @@ export class ClaudeProvider implements LLMProvider {
     })
 
     const response = await this.client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: this.model,
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [

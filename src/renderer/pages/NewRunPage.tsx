@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import type { AppSettings, RunMeta } from '../types'
-import { PROVIDERS, providerMeta, type ProviderId } from '../providers'
+import { providerMeta, type ProviderId } from '../providers'
 
 function hostOf(url: string): string {
   try {
@@ -21,7 +21,6 @@ function generateRunId(): string {
 
 interface FormState {
   mode: 'agent' | 'assisted'
-  provider: ProviderId
   productName: string
   url: string
   feature: string
@@ -34,13 +33,11 @@ export default function NewRunPage(): JSX.Element {
   const prefill = (location.state as { prefill?: Partial<FormState> } | null)?.prefill
 
   const [form, setForm] = useState<FormState>(() => ({
-    mode: 'agent',
-    provider: 'claude',
-    productName: '',
-    url: '',
-    feature: '',
-    goal: '',
-    ...prefill
+    mode: prefill?.mode ?? 'agent',
+    productName: prefill?.productName ?? '',
+    url: prefill?.url ?? '',
+    feature: prefill?.feature ?? '',
+    goal: prefill?.goal ?? '',
   }))
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({})
   const [settings, setSettings] = useState<Partial<AppSettings>>({})
@@ -63,10 +60,6 @@ export default function NewRunPage(): JSX.Element {
   useEffect(() => {
     window.electronAPI.settingsGetAll().then(s => {
       setSettings(s)
-      // Don't override an explicitly pre-filled provider (from a re-run).
-      if (s.defaultProvider && !prefill) {
-        setForm(prev => ({ ...prev, provider: s.defaultProvider as ProviderId }))
-      }
     }).catch(console.error)
 
     window.electronAPI.credentialsList()
@@ -110,7 +103,9 @@ export default function NewRunPage(): JSX.Element {
     e.preventDefault()
     if (!validate()) return
 
-    if (!providerReady(form.provider) && form.mode === 'agent') {
+    const provider = (settings.defaultProvider ?? 'claude') as ProviderId
+
+    if (!providerReady(provider) && form.mode === 'agent') {
       if (!overrideGrantedRef.current) {
         setRequiresOverride(true)
         return
@@ -130,7 +125,7 @@ export default function NewRunPage(): JSX.Element {
           productName: form.productName.trim() || new URL(form.url.trim()).hostname,
           feature: form.feature.trim(),
           goal: form.goal.trim(),
-          provider: form.provider
+          provider
         })
         navigate(`/runs/${runId}`)
       } catch (err) {
@@ -143,7 +138,7 @@ export default function NewRunPage(): JSX.Element {
         await window.electronAPI.runSave({
           id: runId,
           mode: 'assisted',
-          provider: form.provider,
+          provider,
           productName: form.productName.trim(),
           feature: form.feature.trim(),
           goal: form.goal.trim(),
@@ -162,7 +157,7 @@ export default function NewRunPage(): JSX.Element {
   const update = (key: keyof FormState, value: string): void => {
     setForm(prev => ({ ...prev, [key]: value }))
     if (errors[key]) setErrors(prev => ({ ...prev, [key]: undefined }))
-    if (key === 'provider' || key === 'mode') setRequiresOverride(false)
+    if (key === 'mode') setRequiresOverride(false)
     if (key === 'productName') productNameEditedRef.current = true
   }
 
@@ -188,12 +183,8 @@ export default function NewRunPage(): JSX.Element {
     return true
   }
 
-  const readinessText = (p: ProviderId): string => {
-    if (p === 'openai') return 'OpenAI-compatible endpoint'
-    return providerReady(p) ? 'API key configured' : 'No API key'
-  }
-
-  const providerWarning = form.mode === 'agent' && !providerReady(form.provider)
+  const activeProvider = (settings.defaultProvider ?? 'claude') as ProviderId
+  const providerWarning = form.mode === 'agent' && !providerReady(activeProvider)
 
   // Saved login credentials matching the entered URL, if any.
   const credentialMatch = (() => {
@@ -288,44 +279,28 @@ export default function NewRunPage(): JSX.Element {
             </div>
           </div>
 
-          {/* Provider selection */}
+          {/* Active provider (read-only — configured in Settings) */}
           <div>
             <div className="label">LLM Provider</div>
-            <div className="grid grid-cols-3 gap-3">
-              {PROVIDERS.map(meta => {
-                const ready = providerReady(meta.id)
-                const selected = form.provider === meta.id
-                return (
-                  <button
-                    key={meta.id}
-                    type="button"
-                    onClick={() => update('provider', meta.id)}
-                    className={`
-                      p-3 rounded-xl border-2 text-left transition-all duration-150
-                      ${selected
-                        ? meta.accentBorder
-                        : 'border-slate-800 hover:border-slate-700 bg-slate-900'
-                      }
-                    `}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className={meta.badgeClass}>{meta.label}</span>
-                      {selected && (
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={meta.accentText}>
-                          <path d="M2 7l3.5 3.5L12 3" />
-                        </svg>
-                      )}
-                    </div>
-                    <div className="mt-1.5 text-xs text-slate-400">{meta.vendor}</div>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <div className={`w-1.5 h-1.5 rounded-full ${ready ? 'bg-green-400' : 'bg-slate-600'}`} />
-                      <span className={`text-xs ${ready ? 'text-green-400' : 'text-slate-500'}`}>
-                        {readinessText(meta.id)}
-                      </span>
-                    </div>
-                  </button>
-                )
-              })}
+            <div className="flex items-center justify-between px-3 py-2.5 rounded-xl border border-slate-800 bg-slate-900">
+              <div className="flex items-center gap-2.5">
+                <span className={providerMeta(activeProvider).badgeClass}>
+                  {providerMeta(activeProvider).label}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-1.5 h-1.5 rounded-full ${providerReady(activeProvider) ? 'bg-green-400' : 'bg-slate-600'}`} />
+                  <span className={`text-xs ${providerReady(activeProvider) ? 'text-green-400' : 'text-slate-500'}`}>
+                    {providerReady(activeProvider) ? 'API key configured' : 'No API key'}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/settings')}
+                className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                Change in Settings →
+              </button>
             </div>
 
             {providerWarning && (
@@ -339,7 +314,7 @@ export default function NewRunPage(): JSX.Element {
                     <path d="M6.5 1.5L1 11h11L6.5 1.5z" />
                     <path d="M6.5 5v3M6.5 9.5h.01" />
                   </svg>
-                  No API key for {providerMeta(form.provider).label}.
+                  No API key for {providerMeta(activeProvider).label}.
                   {!requiresOverride && (
                     <button
                       type="button"

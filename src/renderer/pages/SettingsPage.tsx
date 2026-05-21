@@ -3,10 +3,14 @@ import { PROVIDERS, type ProviderId } from '../providers'
 
 const DEFAULT_OPENAI_BASE_URL = 'http://localhost:4141/v1'
 const DEFAULT_OPENAI_MODEL = 'gpt-4.1'
+const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6'
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
 
 interface SettingsState {
   claudeApiKey: string
+  claudeModel: string
   geminiApiKey: string
+  geminiModel: string
   openaiApiKey: string
   openaiBaseUrl: string
   openaiModel: string
@@ -29,7 +33,9 @@ interface CredentialEntry {
 export default function SettingsPage(): JSX.Element {
   const [settings, setSettings] = useState<SettingsState>({
     claudeApiKey: '',
+    claudeModel: DEFAULT_CLAUDE_MODEL,
     geminiApiKey: '',
+    geminiModel: DEFAULT_GEMINI_MODEL,
     openaiApiKey: '',
     openaiBaseUrl: DEFAULT_OPENAI_BASE_URL,
     openaiModel: DEFAULT_OPENAI_MODEL,
@@ -63,7 +69,9 @@ export default function SettingsPage(): JSX.Element {
 
         setSettings({
           claudeApiKey: claudeKey || '',
+          claudeModel: (all.claudeModel as string) || DEFAULT_CLAUDE_MODEL,
           geminiApiKey: geminiKey || '',
+          geminiModel: (all.geminiModel as string) || DEFAULT_GEMINI_MODEL,
           openaiApiKey: openaiKey || '',
           openaiBaseUrl: (all.openaiBaseUrl as string) || DEFAULT_OPENAI_BASE_URL,
           openaiModel: (all.openaiModel as string) || DEFAULT_OPENAI_MODEL,
@@ -214,35 +222,50 @@ export default function SettingsPage(): JSX.Element {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="badge-claude">Claude</span>
-                      <span className="text-xs text-slate-500">Anthropic · claude-sonnet-4-6</span>
+                      <span className="text-xs text-slate-500">Anthropic</span>
                     </div>
 
-                    <div className="relative">
-                      <input
-                        type={showClaudeKey ? 'text' : 'password'}
-                        value={settings.claudeApiKey}
-                        onChange={e => setSettings(prev => ({ ...prev, claudeApiKey: e.target.value }))}
-                        placeholder="sk-ant-..."
-                        className="input pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowClaudeKey(!showClaudeKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                      >
-                        {showClaudeKey ? (
-                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                            <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
-                            <circle cx="7" cy="7" r="1.5" />
-                            <path d="M1 1l12 12" />
-                          </svg>
-                        ) : (
-                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                            <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
-                            <circle cx="7" cy="7" r="1.5" />
-                          </svg>
-                        )}
-                      </button>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="label">API Key</label>
+                        <div className="relative">
+                          <input
+                            type={showClaudeKey ? 'text' : 'password'}
+                            value={settings.claudeApiKey}
+                            onChange={e => setSettings(prev => ({ ...prev, claudeApiKey: e.target.value }))}
+                            placeholder="sk-ant-..."
+                            className="input pr-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowClaudeKey(!showClaudeKey)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                          >
+                            {showClaudeKey ? (
+                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                                <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
+                                <circle cx="7" cy="7" r="1.5" />
+                                <path d="M1 1l12 12" />
+                              </svg>
+                            ) : (
+                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                                <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
+                                <circle cx="7" cy="7" r="1.5" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="label">Model</label>
+                        <input
+                          type="text"
+                          value={settings.claudeModel}
+                          onChange={e => setSettings(prev => ({ ...prev, claudeModel: e.target.value }))}
+                          placeholder={DEFAULT_CLAUDE_MODEL}
+                          className="input font-mono text-xs"
+                        />
+                      </div>
                     </div>
 
                     {testState.claude === 'fail' && testErrors.claude && (
@@ -253,11 +276,14 @@ export default function SettingsPage(): JSX.Element {
 
                 <div className="flex items-center gap-2 mt-3">
                   <button
-                    onClick={() => saveField('claudeApiKey', settings.claudeApiKey)}
+                    onClick={() => {
+                      saveField('claudeApiKey', settings.claudeApiKey)
+                      saveField('claudeModel', settings.claudeModel)
+                    }}
                     disabled={saving.has('claudeApiKey')}
                     className="btn btn-secondary btn-sm"
                   >
-                    {saving.has('claudeApiKey') ? 'Saving...' : 'Save Key'}
+                    {saving.has('claudeApiKey') ? 'Saving...' : 'Save'}
                   </button>
 
                   <button
@@ -292,35 +318,50 @@ export default function SettingsPage(): JSX.Element {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="badge-gemini">Gemini</span>
-                      <span className="text-xs text-slate-500">Google · gemini-2.5-flash</span>
+                      <span className="text-xs text-slate-500">Google</span>
                     </div>
 
-                    <div className="relative">
-                      <input
-                        type={showGeminiKey ? 'text' : 'password'}
-                        value={settings.geminiApiKey}
-                        onChange={e => setSettings(prev => ({ ...prev, geminiApiKey: e.target.value }))}
-                        placeholder="AIza..."
-                        className="input pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowGeminiKey(!showGeminiKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                      >
-                        {showGeminiKey ? (
-                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                            <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
-                            <circle cx="7" cy="7" r="1.5" />
-                            <path d="M1 1l12 12" />
-                          </svg>
-                        ) : (
-                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                            <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
-                            <circle cx="7" cy="7" r="1.5" />
-                          </svg>
-                        )}
-                      </button>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="label">API Key</label>
+                        <div className="relative">
+                          <input
+                            type={showGeminiKey ? 'text' : 'password'}
+                            value={settings.geminiApiKey}
+                            onChange={e => setSettings(prev => ({ ...prev, geminiApiKey: e.target.value }))}
+                            placeholder="AIza..."
+                            className="input pr-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowGeminiKey(!showGeminiKey)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                          >
+                            {showGeminiKey ? (
+                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                                <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
+                                <circle cx="7" cy="7" r="1.5" />
+                                <path d="M1 1l12 12" />
+                              </svg>
+                            ) : (
+                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                                <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
+                                <circle cx="7" cy="7" r="1.5" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="label">Model</label>
+                        <input
+                          type="text"
+                          value={settings.geminiModel}
+                          onChange={e => setSettings(prev => ({ ...prev, geminiModel: e.target.value }))}
+                          placeholder={DEFAULT_GEMINI_MODEL}
+                          className="input font-mono text-xs"
+                        />
+                      </div>
                     </div>
 
                     {testState.gemini === 'fail' && testErrors.gemini && (
@@ -331,11 +372,14 @@ export default function SettingsPage(): JSX.Element {
 
                 <div className="flex items-center gap-2 mt-3">
                   <button
-                    onClick={() => saveField('geminiApiKey', settings.geminiApiKey)}
+                    onClick={() => {
+                      saveField('geminiApiKey', settings.geminiApiKey)
+                      saveField('geminiModel', settings.geminiModel)
+                    }}
                     disabled={saving.has('geminiApiKey')}
                     className="btn btn-secondary btn-sm"
                   >
-                    {saving.has('geminiApiKey') ? 'Saving...' : 'Save Key'}
+                    {saving.has('geminiApiKey') ? 'Saving...' : 'Save'}
                   </button>
 
                   <button
@@ -559,11 +603,11 @@ export default function SettingsPage(): JSX.Element {
             </div>
           </section>
 
-          {/* Default Provider */}
+          {/* LLM Provider */}
           <section>
-            <h2 className="text-base font-semibold text-slate-100 mb-1">Default Provider</h2>
+            <h2 className="text-base font-semibold text-slate-100 mb-1">LLM Provider</h2>
             <p className="text-xs text-slate-500 mb-4">
-              The default LLM provider used when creating new runs.
+              The provider used for all runs. Set your API key and model above, then select the active provider here.
             </p>
 
             <div className="grid grid-cols-3 gap-3">
@@ -666,11 +710,11 @@ export default function SettingsPage(): JSX.Element {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Claude model</span>
-                <span className="text-slate-300 font-mono text-xs">claude-sonnet-4-6</span>
+                <span className="text-slate-300 font-mono text-xs">{settings.claudeModel || DEFAULT_CLAUDE_MODEL}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Gemini model</span>
-                <span className="text-slate-300 font-mono text-xs">gemini-2.5-flash</span>
+                <span className="text-slate-300 font-mono text-xs">{settings.geminiModel || DEFAULT_GEMINI_MODEL}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">OpenAI model</span>
