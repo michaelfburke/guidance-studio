@@ -1,6 +1,6 @@
 {
   "name": "guidance-studio",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "AI-powered documentation generation tool",
   "main": "out/main/main.js",
   "type": "module",
