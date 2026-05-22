@@ -27,7 +27,7 @@ export interface CredentialSecret {
 }
 
 /** Reduces a domain or pasted URL to a bare, lower-cased host (no scheme, no www). */
-function normalizeDomain(input: string): string {
+export function normalizeDomain(input: string): string {
   return input
     .trim()
     .toLowerCase()

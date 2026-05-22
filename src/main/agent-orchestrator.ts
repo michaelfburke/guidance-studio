@@ -28,7 +28,7 @@ export interface AgentEvent {
   fatal?: boolean
 }
 
-interface AgentAction {
+export interface AgentAction {
   title: string
   description: string
   action: 'click' | 'type' | 'navigate' | 'scroll' | 'done'
@@ -298,7 +298,7 @@ async function decideAction(
  * Extracts and validates an AgentAction from a raw LLM reply. Throws on any
  * malformed or incomplete response so the caller can re-prompt.
  */
-function parseAgentAction(raw: string): AgentAction {
+export function parseAgentAction(raw: string): AgentAction {
   let json = raw.trim()
   // Strip markdown fences if the model added them anyway.
   json = json.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '')
@@ -328,7 +328,7 @@ function parseAgentAction(raw: string): AgentAction {
  * values. This is the only place the actual secrets are used — they are never
  * sent to the LLM, logged, or written into saved run steps.
  */
-function applyCredentials(value: string, creds: CredentialSecret | null): string {
+export function applyCredentials(value: string, creds: CredentialSecret | null): string {
   if (!creds) return value
   return value
     .replace(/\{\{\s*username\s*\}\}/gi, creds.username)
