@@ -144,6 +144,38 @@
   }
 }
 
+/* Markdown preview rendered by marked — dark-mode prose styles */
+.doc-preview {
+  color: theme('colors.slate.300');
+  font-size: theme('fontSize.sm');
+  line-height: theme('lineHeight.relaxed');
+}
+.doc-preview h1 { @apply text-xl font-bold text-slate-100 mt-4 mb-4; }
+.doc-preview h2 { @apply text-lg font-semibold text-slate-100 mt-6 mb-3 pb-1 border-b border-slate-800; }
+.doc-preview h3 { @apply text-base font-semibold text-slate-100 mt-5 mb-2; }
+.doc-preview h4,
+.doc-preview h5,
+.doc-preview h6 { @apply text-sm font-semibold text-slate-200 mt-4 mb-2; }
+.doc-preview p { @apply text-slate-300 mb-3 leading-relaxed; }
+.doc-preview a { @apply text-brand-400 hover:text-brand-300 underline decoration-dotted; }
+.doc-preview strong { @apply text-slate-200 font-semibold; }
+.doc-preview em { @apply italic; }
+.doc-preview code { @apply bg-slate-800 text-brand-300 px-1.5 py-0.5 rounded text-xs font-mono; }
+.doc-preview pre { @apply bg-slate-800 rounded-lg p-3 my-3 overflow-x-auto; }
+.doc-preview pre code { @apply bg-transparent text-slate-300 p-0; }
+.doc-preview ul { @apply list-disc ml-5 mb-3 space-y-1; }
+.doc-preview ol { @apply list-decimal ml-5 mb-3 space-y-1; }
+.doc-preview li { @apply text-slate-300; }
+.doc-preview blockquote { @apply border-l-2 border-brand-600 pl-4 text-slate-400 italic my-3; }
+.doc-preview hr { @apply border-slate-800 my-4; }
+.doc-preview img { @apply rounded-lg border border-slate-800 my-3 max-w-full; }
+.doc-preview table { @apply w-full border-collapse my-4 text-sm; }
+.doc-preview thead { @apply bg-slate-800; }
+.doc-preview th { @apply text-left text-slate-200 font-semibold px-3 py-2 border border-slate-700; }
+.doc-preview td { @apply text-slate-300 px-3 py-2 border border-slate-700/60; }
+.doc-preview tbody tr:nth-child(even) { @apply bg-slate-900/50; }
+.doc-preview input[type="checkbox"] { @apply accent-brand-500 mr-1.5; }
+
 @layer utilities {
   .draggable {
     -webkit-app-region: drag;

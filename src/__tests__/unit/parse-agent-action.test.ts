@@ -65,10 +65,15 @@ describe('parseAgentAction', () => {
   })
 
   it('parses all five valid action types', () => {
-    const actions = ['click', 'type', 'navigate', 'scroll', 'done'] as const
-    for (const action of actions) {
-      const raw = JSON.stringify({ action, title: `Do ${action}` })
-      expect(() => parseAgentAction(raw)).not.toThrow()
+    const cases: Array<Record<string, unknown>> = [
+      { action: 'click', title: 'Click something', index: 0 },
+      { action: 'type', title: 'Type something', index: 2, value: 'hello' },
+      { action: 'navigate', title: 'Navigate', value: 'https://example.com' },
+      { action: 'scroll', title: 'Scroll' },
+      { action: 'done', title: 'Done' }
+    ]
+    for (const c of cases) {
+      expect(() => parseAgentAction(JSON.stringify(c))).not.toThrow()
     }
   })
 

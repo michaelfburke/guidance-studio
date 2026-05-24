@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 
 function GsLogo(): JSX.Element {
@@ -51,6 +51,11 @@ export default function Layout(): JSX.Element {
   const navigate = useNavigate()
   const location = useLocation()
   const isMac = window.electronAPI.platform === 'darwin'
+  const [appVersion, setAppVersion] = useState<string>('...')
+
+  useEffect(() => {
+    window.electronAPI.getAppVersion().then(v => setAppVersion(v)).catch(() => setAppVersion(''))
+  }, [])
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950">
@@ -64,7 +69,7 @@ export default function Layout(): JSX.Element {
           <GsLogo />
           <div>
             <div className="font-semibold text-sm text-slate-100 leading-tight">GuidanceStudio</div>
-            <div className="text-xs text-slate-500 leading-tight">v1.0.0</div>
+            {appVersion && <div className="text-xs text-slate-500 leading-tight">v{appVersion}</div>}
           </div>
         </div>
 

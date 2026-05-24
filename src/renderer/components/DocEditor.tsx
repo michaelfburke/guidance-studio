@@ -1,4 +1,8 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useMemo } from 'react'
+import { marked } from 'marked'
+
+// Configure marked once at module level: GFM tables + line breaks
+marked.setOptions({ gfm: true, breaks: true })
 
 interface DocEditorProps {
   markdown: string
@@ -11,56 +15,15 @@ interface DocEditorProps {
 }
 
 function MarkdownPreview({ markdown }: { markdown: string }): JSX.Element {
-  // Simple markdown renderer
-  const renderMarkdown = (text: string): string => {
-    return text
-      // Escape HTML
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      // Headers
-      .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold text-slate-100 mt-5 mb-2">$1</h3>')
-      .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold text-slate-100 mt-6 mb-3 pb-1 border-b border-slate-800">$1</h2>')
-      .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold text-slate-100 mt-4 mb-4">$1</h1>')
-      // Bold and italic
-      .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-      .replace(/\*\*(.+?)\*\*/g, '<strong class="text-slate-200">$1</strong>')
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      // Code
-      .replace(/`([^`]+)`/g, '<code class="bg-slate-800 text-brand-300 px-1.5 py-0.5 rounded text-xs font-mono">$1</code>')
-      // Block code
-      .replace(/```[\s\S]*?```/g, (match) => {
-        const code = match.replace(/```\w*\n?/, '').replace(/\n?```$/, '')
-        return `<pre class="bg-slate-800 rounded-lg p-3 my-3 overflow-x-auto"><code class="text-sm font-mono text-slate-300">${code}</code></pre>`
-      })
-      // Images
-      .replace(
-        /!\[([^\]]*)\]\(([^)\s]+)\)/g,
-        '<img src="$2" alt="$1" class="rounded-lg border border-slate-800 my-3 max-w-full" />'
-      )
-      // Checkboxes
-      .replace(/^- \[ \] (.+)$/gm, '<li class="flex items-start gap-2 text-slate-300 mb-1"><span class="mt-0.5 w-4 h-4 border border-slate-600 rounded flex-shrink-0"></span><span>$1</span></li>')
-      .replace(/^- \[x\] (.+)$/gm, '<li class="flex items-start gap-2 text-slate-300 mb-1"><span class="mt-0.5 w-4 h-4 bg-brand-600 border border-brand-600 rounded flex-shrink-0 flex items-center justify-center text-xs text-white">✓</span><span>$1</span></li>')
-      // Lists
-      .replace(/^- (.+)$/gm, '<li class="text-slate-300 mb-1 ml-4 list-disc">$1</li>')
-      .replace(/^\d+\. (.+)$/gm, '<li class="text-slate-300 mb-1 ml-4 list-decimal">$1</li>')
-      // Horizontal rule
-      .replace(/^---$/gm, '<hr class="border-slate-800 my-4" />')
-      // Blockquote
-      .replace(/^> (.+)$/gm, '<blockquote class="border-l-2 border-brand-600 pl-4 text-slate-400 italic my-3">$1</blockquote>')
-      // Paragraphs
-      .replace(/\n\n/g, '</p><p class="text-slate-300 mb-3 leading-relaxed">')
-      .replace(/\n/g, '<br />')
-  }
-
-  const html = renderMarkdown(markdown)
+  const html = useMemo(() => {
+    const result = marked.parse(markdown)
+    return typeof result === 'string' ? result : ''
+  }, [markdown])
 
   return (
     <div
-      className="prose-custom px-6 py-5 text-sm leading-relaxed overflow-y-auto h-full"
-      dangerouslySetInnerHTML={{
-        __html: `<div class="text-slate-300 leading-relaxed">${html}</div>`
-      }}
+      className="doc-preview px-6 py-5 overflow-y-auto h-full"
+      dangerouslySetInnerHTML={{ __html: html }}
     />
   )
 }

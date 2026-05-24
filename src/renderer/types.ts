@@ -103,7 +103,7 @@ export interface ElectronAPI {
     provider: string
     toneGuide?: string
     linkedDocs?: string
-  }) => Promise<{ success: boolean; markdown: string }>
+  }) => Promise<{ success: boolean; markdown: string; skippedScreenshots?: number }>
 
   llmTestConnection: (provider: string) => Promise<{ success: boolean; error?: string }>
 

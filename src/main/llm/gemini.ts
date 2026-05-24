@@ -45,6 +45,10 @@ export class GeminiProvider implements LLMProvider {
     })
 
     const response = await result.response
-    return response.text()
+    const text = response.text()
+    if (typeof text !== 'string' || text.length === 0) {
+      throw new Error('Gemini returned an empty response')
+    }
+    return text
   }
 }

@@ -283,7 +283,7 @@ export default function ScreenRecorder({
               </svg>
               Start Recording
             </button>
-            <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none ml-1">
+            <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none ml-1" title="Uses browser speech recognition — works best in Chromium-based environments">
               <input
                 type="checkbox"
                 checked={micEnabled}
@@ -294,7 +294,7 @@ export default function ScreenRecorder({
                 <rect x="4" y="1" width="4" height="6" rx="2" />
                 <path d="M2 6a4 4 0 008 0M6 10v1.5M4.5 11.5h3" />
               </svg>
-              Transcribe voice
+              Auto-caption <span className="text-slate-700">(experimental)</span>
             </label>
           </>
         ) : (

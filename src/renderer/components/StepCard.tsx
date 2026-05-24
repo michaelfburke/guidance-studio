@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import type { RunStep } from '../types'
 
 interface StepCardProps {
@@ -21,7 +21,13 @@ export default function StepCard({
   showDelete = false
 }: StepCardProps): JSX.Element {
   const [imgError, setImgError] = useState(false)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
   const excluded = !!step.excluded
+
+  const openLightbox = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setLightboxOpen(true)
+  }, [])
 
   const hasScreenshot = step.screenshotPath && !imgError
 
@@ -88,13 +94,22 @@ export default function StepCard({
 
       {/* Screenshot area */}
       {hasScreenshot && screenshotSrc ? (
-        <div className="w-full h-36 bg-slate-800 overflow-hidden">
+        <div
+          className="w-full h-48 bg-slate-800 overflow-hidden cursor-zoom-in relative group/screenshot"
+          onClick={openLightbox}
+          title="Click to enlarge"
+        >
           <img
             src={screenshotSrc}
             alt={`Screenshot for step ${step.index + 1}`}
             className={`w-full h-full object-cover object-top ${excluded ? 'grayscale' : ''}`}
             onError={() => setImgError(true)}
           />
+          <div className="absolute inset-0 bg-black/0 group-hover/screenshot:bg-black/20 transition-colors flex items-center justify-center">
+            <svg className="opacity-0 group-hover/screenshot:opacity-70 transition-opacity" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M15 3h6m0 0v6m0-6l-7 7M9 21H3m0 0v-6m0 6l7-7" />
+            </svg>
+          </div>
         </div>
       ) : (
         <div className="w-full h-28 bg-slate-800/50 flex items-center justify-center">
@@ -145,6 +160,31 @@ export default function StepCard({
               </svg>
             </button>
           )}
+        </div>
+      )}
+
+      {/* Lightbox overlay */}
+      {lightboxOpen && screenshotSrc && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={(e) => { e.stopPropagation(); setLightboxOpen(false) }}
+        >
+          <button
+            className="absolute top-4 right-4 p-2 rounded-full bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+            onClick={(e) => { e.stopPropagation(); setLightboxOpen(false) }}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M4 4l10 10M14 4L4 14" />
+            </svg>
+          </button>
+          <div className="max-w-5xl max-h-[90vh] p-4" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={screenshotSrc}
+              alt={`Step ${step.index + 1} full view`}
+              className="max-w-full max-h-[85vh] rounded-lg border border-slate-700 object-contain shadow-2xl"
+            />
+            <p className="text-center text-xs text-slate-500 mt-2">Step {step.index + 1}: {step.title}</p>
+          </div>
         </div>
       )}
     </div>

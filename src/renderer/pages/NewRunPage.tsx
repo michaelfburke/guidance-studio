@@ -286,9 +286,6 @@ export default function NewRunPage(): JSX.Element {
                       : 'You record your screen while manually capturing steps with screenshots.'
                     }
                   </p>
-                  {mode === 'assisted' && (
-                    <span className="text-xs text-amber-500 mt-1 block">In progress — some features may be incomplete</span>
-                  )}
                 </button>
               ))}
             </div>
@@ -457,12 +454,16 @@ export default function NewRunPage(): JSX.Element {
             <textarea
               value={form.goal}
               onChange={e => update('goal', e.target.value)}
-              placeholder="Describe what you want to document. e.g., 'How to create and configure a new project from scratch'"
+              placeholder="e.g., Show how a new user signs up, verifies their email, and reaches the main dashboard"
               className={`input resize-none ${errors.goal ? 'input-error' : ''}`}
               rows={3}
             />
-            {errors.goal && (
+            {errors.goal ? (
               <p className="text-xs text-red-400 mt-1">{errors.goal}</p>
+            ) : (
+              <p className="text-xs text-slate-600 mt-1">
+                Be specific: name the starting state, the end state, and one clear flow. One feature per run works best.
+              </p>
             )}
           </div>
 

@@ -96,6 +96,9 @@ export async function runAgent(params: {
   const credentials = params.credentials ?? null
   const headless = params.headless ?? false
 
+  if (activeAgents.has(runId)) {
+    throw new Error(`Agent run ${runId} is already active`)
+  }
   activeAgents.set(runId, { stopped: false })
   runEventLogs.set(runId, [])
 
@@ -317,6 +320,14 @@ export function parseAgentAction(raw: string): AgentAction {
     throw new Error(
       `"action" was "${parsed.action}" — must be one of ${VALID_ACTIONS.join(', ')}`
     )
+  }
+  // Actions that target a DOM element must supply a valid non-negative index.
+  if (['click', 'type'].includes(parsed.action)) {
+    if (parsed.index == null || !Number.isInteger(parsed.index) || parsed.index < 0) {
+      throw new Error(
+        `"${parsed.action}" action requires a non-negative integer "index", got: ${JSON.stringify(parsed.index)}`
+      )
+    }
   }
   parsed.title = parsed.title?.trim() || `Step (${parsed.action})`
   parsed.description = parsed.description?.trim() || ''

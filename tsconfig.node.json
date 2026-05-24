@@ -8,8 +8,8 @@
     "strict": true,
     "target": "ESNext",
     "outDir": "dist-electron",
-    "rootDir": "src/main",
     "esModuleInterop": true
   },
-  "include": ["src/main/**/*", "electron.vite.config.ts"]
+  "include": ["src/main/**/*", "electron.vite.config.ts"],
+  "exclude": ["electron.vite.config.ts"]
 }

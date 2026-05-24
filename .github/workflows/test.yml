@@ -22,8 +22,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Type check
+        run: npm run typecheck
+
       - name: Run unit and integration tests
         run: npm test
+
+      - name: Build validation
+        run: npm run build
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4

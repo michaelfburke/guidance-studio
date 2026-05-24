@@ -365,12 +365,13 @@ export function registerIpcHandlers(): void {
 
     // Load screenshots for steps that have them (downscaled for the LLM).
     const images: Buffer[] = []
+    let skippedScreenshots = 0
     for (const step of steps) {
       if (step.screenshotPath) {
         try {
           images.push(toLLMImage(fs.readFileSync(step.screenshotPath)))
         } catch {
-          // skip if file not found
+          skippedScreenshots++
         }
       }
     }
@@ -404,7 +405,7 @@ export function registerIpcHandlers(): void {
       saveRunMeta(meta)
     }
 
-    return { success: true, markdown }
+    return { success: true, markdown, skippedScreenshots }
   })
 
   ipcMain.handle('llm:test-connection', async (_event, provider: string) => {

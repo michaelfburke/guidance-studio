@@ -30,11 +30,14 @@ export default function RunDetailPage(): JSX.Element {
   const [savedDocMarkdown, setSavedDocMarkdown] = useState('')
   const [isGeneratingDocs, setIsGeneratingDocs] = useState(false)
 
-  // Inline error banner
+  // Elapsed time for agent progress indicator
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+
+  // Inline error banner — fatal errors are persistent (no auto-dismiss)
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
-  const showError = useCallback((msg: string) => {
+  const showError = useCallback((msg: string, persistent = false) => {
     setErrorBanner(msg)
-    setTimeout(() => setErrorBanner(null), 30000)
+    if (!persistent) setTimeout(() => setErrorBanner(null), 30000)
   }, [])
 
   const unsubEventRef = useRef<(() => void) | null>(null)
@@ -80,6 +83,7 @@ export default function RunDetailPage(): JSX.Element {
       // recovers from must not hide the Stop button mid-run.
       if (event.type === 'error' && event.fatal) {
         setIsRunning(false)
+        showError(event.message, true)
         // Reload to pick up the persisted final status (failed/stopped).
         setTimeout(() => loadRun(), 500)
       }
@@ -109,6 +113,16 @@ export default function RunDetailPage(): JSX.Element {
   useEffect(() => {
     loadRun()
   }, [loadRun])
+
+  // Tick elapsed time while the agent is running
+  useEffect(() => {
+    if (!isRunning || !run) return
+    const start = new Date(run.meta.createdAt).getTime()
+    const update = () => setElapsedSeconds(Math.floor((Date.now() - start) / 1000))
+    update()
+    const id = setInterval(update, 1000)
+    return () => clearInterval(id)
+  }, [isRunning, run])
 
   const handleStopAgent = useCallback(async () => {
     if (!runId) return
@@ -175,6 +189,12 @@ export default function RunDetailPage(): JSX.Element {
         setDocMarkdown(result.markdown)
         setSavedDocMarkdown(result.markdown)
         setActiveTab('docs')
+
+        if (result.skippedScreenshots && result.skippedScreenshots > 0) {
+          showError(
+            `${result.skippedScreenshots} screenshot${result.skippedScreenshots > 1 ? 's were' : ' was'} not found and omitted from the documentation.`
+          )
+        }
 
         // Update meta
         const updatedMeta: RunMeta = {
@@ -445,6 +465,24 @@ export default function RunDetailPage(): JSX.Element {
           )}
         </button>
       </div>
+
+      {/* Agent progress bar */}
+      {isRunning && meta.mode === 'agent' && (
+        <div className="px-6 py-2 bg-slate-900/50 border-b border-slate-800 flex items-center gap-3">
+          <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-brand-500 rounded-full transition-all duration-500"
+              style={{ width: `${Math.min((liveSteps.length / 16) * 100, 100)}%` }}
+            />
+          </div>
+          <span className="text-xs text-slate-500 shrink-0 tabular-nums">
+            Step {liveSteps.length}/16
+          </span>
+          <span className="text-xs text-slate-600 shrink-0 tabular-nums">
+            {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')}
+          </span>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
